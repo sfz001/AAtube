@@ -1,0 +1,716 @@
+/* 拖拽分栏条 */
+#ytx-resizer {
+  width: 24px;
+  padding-right: 8px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 10;
+  position: relative;
+  transition: background 0.2s;
+}
+#ytx-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: #e5e7eb;
+  transition: all 0.2s;
+}
+#ytx-resizer:hover::before,
+#ytx-resizer.ytx-resizer-active::before {
+  width: 3px;
+  background: #7c3aed;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+}
+#ytx-resizer:hover {
+  background: rgba(124, 58, 237, 0.04);
+}
+#ytx-resizer.ytx-resizer-active {
+  background: rgba(124, 58, 237, 0.08);
+}
+.ytx-resizer-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0;
+  z-index: 1;
+}
+.ytx-resizer-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c4b5fd;
+  transition: all 0.2s;
+}
+#ytx-resizer:hover .ytx-resizer-dot,
+#ytx-resizer.ytx-resizer-active .ytx-resizer-dot {
+  background: #7c3aed;
+  transform: scale(1.2);
+}
+#ytx-drag-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 99999;
+  cursor: col-resize;
+}
+
+/* 视频播放器跟随容器 */
+ytd-watch-flexy.ytx-resized #player-container-inner {
+  max-width: 100% !important;
+}
+ytd-watch-flexy.ytx-resized .html5-video-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+ytd-watch-flexy.ytx-resized video.html5-main-video {
+  width: 100% !important;
+  height: 100% !important;
+  left: 0 !important;
+  top: 0 !important;
+}
+
+
+/* 暗色拖拽条 */
+html[dark] #ytx-resizer::before,
+[dark] #ytx-resizer::before {
+  background: #333;
+}
+html[dark] #ytx-resizer:hover::before,
+[dark] #ytx-resizer:hover::before,
+html[dark] #ytx-resizer.ytx-resizer-active::before,
+[dark] #ytx-resizer.ytx-resizer-active::before {
+  background: #a78bfa;
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.3);
+}
+html[dark] #ytx-resizer:hover,
+[dark] #ytx-resizer:hover {
+  background: rgba(167, 139, 250, 0.06);
+}
+html[dark] .ytx-resizer-dot,
+[dark] .ytx-resizer-dot {
+  background: #555;
+}
+html[dark] #ytx-resizer:hover .ytx-resizer-dot,
+[dark] #ytx-resizer:hover .ytx-resizer-dot,
+html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
+[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot {
+  background: #a78bfa;
+}
+
+/* YouTubeX 面板样式 */
+#ytx-panel {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+#ytx-panel * { box-sizing: border-box; }
+
+#ytx-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+
+#ytx-header .ytx-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f0f0f;
+}
+
+#ytx-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+#ytx-actions-summary,
+#ytx-actions-html {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ytx-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.ytx-btn-primary {
+  background: #7c3aed;
+  color: #fff;
+}
+.ytx-btn-primary:hover { background: #6d28d9; }
+.ytx-btn-primary:disabled {
+  background: #c4b5fd;
+  cursor: not-allowed;
+}
+
+.ytx-btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+.ytx-btn-secondary:hover { background: #e5e7eb; }
+
+/* 标签栏 */
+#ytx-tabs {
+  display: flex;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ytx-tab {
+  flex: 1;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  border-bottom: 2px solid transparent;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  transition: all 0.2s;
+}
+.ytx-tab.active {
+  color: #7c3aed;
+  border-bottom-color: #7c3aed;
+}
+.ytx-tab:hover {
+  background: #f9fafb;
+}
+
+/* HTML 内容区 */
+#ytx-content-html {
+  display: none;
+  padding: 0;
+}
+#ytx-content-html iframe {
+  width: 100%;
+  border: none;
+  height: calc(100vh - 300px);
+}
+#ytx-content-html::-webkit-scrollbar {
+  width: 6px;
+}
+#ytx-content-html::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+#ytx-content-html .ytx-empty {
+  text-align: center;
+  padding: 24px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+#ytx-html-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 内容区 */
+#ytx-content {
+  padding: 14px 16px;
+  max-height: calc(100vh - 300px);
+  min-height: 200px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #1a1a1a;
+}
+
+#ytx-content::-webkit-scrollbar {
+  width: 6px;
+}
+#ytx-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+/* 空状态 */
+#ytx-content .ytx-empty {
+  text-align: center;
+  padding: 24px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+/* Markdown 渲染样式 */
+#ytx-content h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 12px 0 6px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #0f0f0f;
+}
+
+#ytx-content h2:first-child { margin-top: 0; }
+
+#ytx-content p {
+  margin: 4px 0;
+}
+
+#ytx-content p:empty {
+  display: none;
+}
+
+#ytx-content hr {
+  border: none;
+  border-top: 1px solid #e5e5e5;
+  margin: 8px 0;
+}
+
+#ytx-content strong {
+  font-weight: 600;
+}
+
+/* 时间戳链接 */
+#ytx-content .ytx-timestamp {
+  display: inline-block;
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', monospace;
+  cursor: pointer;
+  text-decoration: none;
+  margin-right: 4px;
+  transition: background 0.15s;
+}
+
+#ytx-content .ytx-timestamp:hover {
+  background: #ddd6fe;
+}
+
+/* 互动问答 */
+#ytx-content-chat {
+  display: none;
+  flex-direction: column;
+  height: calc(100vh - 300px);
+}
+.ytx-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ytx-chat-messages::-webkit-scrollbar { width: 6px; }
+.ytx-chat-messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.ytx-chat-messages .ytx-empty {
+  text-align: center;
+  padding: 24px;
+  color: #9ca3af;
+  font-size: 13px;
+  margin: auto;
+}
+.ytx-chat-bubble {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+.ytx-chat-user {
+  align-self: flex-end;
+  background: #7c3aed;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.ytx-chat-ai {
+  align-self: flex-start;
+  background: #f3f4f6;
+  color: #1a1a1a;
+  border-bottom-left-radius: 4px;
+}
+.ytx-chat-ai h2 { font-size: 14px; margin: 8px 0 4px 0; }
+.ytx-chat-ai p { margin: 4px 0; }
+.ytx-chat-ai p:empty { display: none; }
+.ytx-chat-ai .ytx-timestamp {
+  display: inline-block;
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Consolas', monospace;
+  cursor: pointer;
+  margin-right: 4px;
+}
+.ytx-chat-err {
+  color: #dc2626;
+  font-size: 12px;
+}
+.ytx-chat-input-wrap {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+#ytx-chat-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+  color: #1a1a1a;
+  transition: border-color 0.2s;
+}
+#ytx-chat-input:focus {
+  border-color: #7c3aed;
+}
+.ytx-chat-input-wrap .ytx-btn {
+  border-radius: 20px;
+  padding: 8px 16px;
+}
+
+/* 知识卡片 */
+#ytx-content-cards {
+  display: none;
+  flex-direction: column;
+  height: calc(100vh - 300px);
+}
+#ytx-content-cards .ytx-empty {
+  text-align: center;
+  padding: 24px;
+  color: #9ca3af;
+  font-size: 13px;
+  margin: auto;
+}
+.ytx-cards-counter {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+.ytx-cards-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ytx-cards-list::-webkit-scrollbar { width: 6px; }
+.ytx-cards-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.ytx-card {
+  perspective: 800px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ytx-card-inner {
+  position: relative;
+  transition: transform 0.5s;
+  transform-style: preserve-3d;
+}
+.ytx-card.flipped .ytx-card-inner {
+  transform: rotateY(180deg);
+}
+.ytx-card-front,
+.ytx-card-back {
+  backface-visibility: hidden;
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+.ytx-card-front {
+  background: linear-gradient(135deg, #ede9fe 0%, #f5f3ff 100%);
+  border: 1px solid #ddd6fe;
+}
+.ytx-card-back {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, #f0fdf4 0%, #f5f3ff 100%);
+  border: 1px solid #bbf7d0;
+  transform: rotateY(180deg);
+}
+.ytx-card-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #7c3aed;
+  margin-bottom: 6px;
+}
+.ytx-card-back .ytx-card-label {
+  color: #16a34a;
+}
+.ytx-card-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+.ytx-card-time {
+  margin-top: 8px;
+}
+.ytx-card-hint {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #b0b0b0;
+}
+
+/* 字幕区 */
+#ytx-transcript-section {
+  border-top: 1px solid #f0f0f0;
+}
+
+#ytx-transcript-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+#ytx-transcript-toggle:hover {
+  background: #f9fafb;
+}
+
+#ytx-transcript-toggle .arrow {
+  transition: transform 0.2s;
+  font-size: 12px;
+}
+#ytx-transcript-toggle .arrow.open {
+  transform: rotate(180deg);
+}
+
+#ytx-transcript-body {
+  display: none;
+  padding: 0 16px 12px;
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+#ytx-transcript-body.open {
+  display: block;
+}
+
+#ytx-transcript-body .ytx-transcript-line {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+#ytx-transcript-body .ytx-ts {
+  flex-shrink: 0;
+  color: #7c3aed;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 45px;
+}
+#ytx-transcript-body .ytx-ts:hover {
+  text-decoration: underline;
+}
+
+/* 加载动画 */
+.ytx-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7c3aed;
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.ytx-loading .ytx-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: ytx-spin 0.7s linear infinite;
+}
+
+@keyframes ytx-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 错误提示 */
+.ytx-error {
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* 暗色模式 */
+html[dark] #ytx-panel,
+[dark] #ytx-panel {
+  background: #1a1a1a;
+  border-color: #333;
+}
+html[dark] #ytx-header,
+[dark] #ytx-header {
+  background: #222;
+  border-color: #333;
+}
+html[dark] #ytx-header .ytx-title,
+[dark] #ytx-header .ytx-title {
+  color: #e5e5e5;
+}
+html[dark] #ytx-content,
+[dark] #ytx-content {
+  color: #d4d4d4;
+}
+html[dark] #ytx-content h2,
+[dark] #ytx-content h2 {
+  color: #e5e5e5;
+  border-color: #333;
+}
+html[dark] .ytx-btn-secondary,
+[dark] .ytx-btn-secondary {
+  background: #333;
+  color: #d4d4d4;
+}
+html[dark] .ytx-btn-secondary:hover,
+[dark] .ytx-btn-secondary:hover {
+  background: #444;
+}
+html[dark] #ytx-content .ytx-timestamp,
+[dark] #ytx-content .ytx-timestamp {
+  background: #2d1b69;
+  color: #a78bfa;
+}
+html[dark] #ytx-transcript-body,
+[dark] #ytx-transcript-body {
+  color: #9ca3af;
+}
+html[dark] .ytx-error,
+[dark] .ytx-error {
+  background: #2d1414;
+}
+html[dark] #ytx-tabs,
+[dark] #ytx-tabs {
+  border-color: #333;
+}
+html[dark] .ytx-tab,
+[dark] .ytx-tab {
+  color: #9ca3af;
+}
+html[dark] .ytx-tab.active,
+[dark] .ytx-tab.active {
+  color: #a78bfa;
+  border-bottom-color: #a78bfa;
+}
+html[dark] .ytx-tab:hover,
+[dark] .ytx-tab:hover {
+  background: #2a2a2a;
+}
+html[dark] #ytx-html-toolbar,
+[dark] #ytx-html-toolbar {
+  border-color: #333;
+}
+html[dark] #ytx-content-html .ytx-empty,
+[dark] #ytx-content-html .ytx-empty {
+  color: #6b7280;
+}
+
+/* 暗色 - 互动问答 */
+html[dark] .ytx-chat-ai,
+[dark] .ytx-chat-ai {
+  background: #2a2a2a;
+  color: #d4d4d4;
+}
+html[dark] .ytx-chat-ai .ytx-timestamp,
+[dark] .ytx-chat-ai .ytx-timestamp {
+  background: #2d1b69;
+  color: #a78bfa;
+}
+html[dark] .ytx-chat-input-wrap,
+[dark] .ytx-chat-input-wrap {
+  border-color: #333;
+}
+html[dark] #ytx-chat-input,
+[dark] #ytx-chat-input {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #d4d4d4;
+}
+html[dark] #ytx-chat-input:focus,
+[dark] #ytx-chat-input:focus {
+  border-color: #a78bfa;
+}
+html[dark] .ytx-chat-messages .ytx-empty,
+[dark] .ytx-chat-messages .ytx-empty,
+html[dark] #ytx-content-cards .ytx-empty,
+[dark] #ytx-content-cards .ytx-empty {
+  color: #6b7280;
+}
+
+/* 暗色 - 知识卡片 */
+html[dark] .ytx-cards-counter,
+[dark] .ytx-cards-counter {
+  border-bottom-color: #333;
+}
+html[dark] .ytx-cards-list::-webkit-scrollbar-thumb,
+[dark] .ytx-cards-list::-webkit-scrollbar-thumb {
+  background: #555;
+}
+html[dark] .ytx-card-front,
+[dark] .ytx-card-front {
+  background: linear-gradient(135deg, #1e1346 0%, #1a1a2e 100%);
+  border-color: #3b2d6e;
+}
+html[dark] .ytx-card-back,
+[dark] .ytx-card-back {
+  background: linear-gradient(135deg, #0f2918 0%, #1a1a2e 100%);
+  border-color: #1e5631;
+}
+html[dark] .ytx-card-text,
+[dark] .ytx-card-text {
+  color: #e5e5e5;
+}
+html[dark] .ytx-card-label,
+[dark] .ytx-card-label {
+  color: #a78bfa;
+}
+html[dark] .ytx-card-back .ytx-card-label,
+[dark] .ytx-card-back .ytx-card-label {
+  color: #4ade80;
+}
