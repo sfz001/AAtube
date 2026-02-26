@@ -1,7 +1,7 @@
 /* 拖拽分栏条 */
 #ytx-resizer {
-  width: 24px;
-  padding-right: 8px;
+  width: 32px;
+  padding-right: 16px;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -428,6 +428,9 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
   perspective: 800px;
   cursor: pointer;
   flex-shrink: 0;
+  max-width: 360px;
+  margin: 0 auto;
+  width: 100%;
 }
 .ytx-card-inner {
   position: relative;
@@ -482,6 +485,80 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
   margin-top: 8px;
   font-size: 10px;
   color: #b0b0b0;
+}
+
+/* 思维导图 */
+#ytx-content-mindmap {
+  display: none;
+  flex-direction: column;
+  height: calc(100vh - 300px);
+  position: relative;
+}
+#ytx-content-mindmap .ytx-empty {
+  text-align: center;
+  padding: 24px;
+  color: #9ca3af;
+  font-size: 13px;
+  margin: auto;
+}
+.ytx-mindmap-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+  background: #fafafa;
+}
+.ytx-mm-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.ytx-mm-zoom-btn:hover {
+  background: #f3f4f6;
+  border-color: #c4b5fd;
+  color: #7c3aed;
+}
+.ytx-mindmap-viewport {
+  flex: 1;
+  overflow: hidden;
+  cursor: grab;
+  position: relative;
+}
+.ytx-mindmap-viewport:active {
+  cursor: grabbing;
+}
+.ytx-mindmap-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ytx-mm-node rect {
+  transition: filter 0.15s;
+}
+.ytx-mm-node:hover rect {
+  filter: brightness(0.95);
+}
+.ytx-mm-toggle circle {
+  transition: all 0.15s;
+}
+.ytx-mm-toggle:hover circle {
+  fill: #ede9fe;
+  stroke: #7c3aed;
+}
+.ytx-mm-timestamp:hover rect {
+  filter: brightness(0.9);
 }
 
 /* 字幕区 */
@@ -713,4 +790,31 @@ html[dark] .ytx-card-label,
 html[dark] .ytx-card-back .ytx-card-label,
 [dark] .ytx-card-back .ytx-card-label {
   color: #4ade80;
+}
+
+/* 暗色 - 思维导图 */
+html[dark] #ytx-content-mindmap .ytx-empty,
+[dark] #ytx-content-mindmap .ytx-empty {
+  color: #6b7280;
+}
+html[dark] .ytx-mindmap-toolbar,
+[dark] .ytx-mindmap-toolbar {
+  background: #222;
+  border-bottom-color: #333;
+}
+html[dark] .ytx-mm-zoom-btn,
+[dark] .ytx-mm-zoom-btn {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #9ca3af;
+}
+html[dark] .ytx-mm-zoom-btn:hover,
+[dark] .ytx-mm-zoom-btn:hover {
+  background: #333;
+  border-color: #7c3aed;
+  color: #a78bfa;
+}
+html[dark] .ytx-mindmap-viewport,
+[dark] .ytx-mindmap-viewport {
+  background: #1a1a1a;
 }

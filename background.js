@@ -20,6 +20,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ started: true });
     return true;
   }
+  if (message.type === 'GENERATE_MINDMAP') {
+    handleSummarize(message, sender.tab.id, 'MINDMAP');
+    sendResponse({ started: true });
+    return true;
+  }
   if (message.type === 'CHAT_ASK') {
     handleChat(message, sender.tab.id);
     sendResponse({ started: true });
@@ -301,13 +306,20 @@ async function scrapeTranscriptFromDOM(videoId) {
   }
 }
 
+// ── 安全发送消息（忽略 tab 不存在的错误）─────────────────
+function safeSend(tabId, msg) {
+  try {
+    chrome.tabs.sendMessage(tabId, msg).catch(() => {});
+  } catch {}
+}
+
 // ── Claude API 流式调用 ────────────────────────────────
 async function handleSummarize(message, tabId, mode = 'SUMMARY') {
   const { transcript, prompt, apiKey, model } = message;
   const PREFIX = mode; // 'SUMMARY' or 'HTML'
 
   if (!apiKey) {
-    chrome.tabs.sendMessage(tabId, { type: `${PREFIX}_ERROR`, error: '请先在扩展设置中填入 Claude API Key' });
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: '请先在扩展设置中填入 Claude API Key' });
     return;
   }
 
@@ -332,13 +344,14 @@ async function handleSummarize(message, tabId, mode = 'SUMMARY') {
 
     if (!response.ok) {
       const err = await response.text();
-      chrome.tabs.sendMessage(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
       return;
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let doneSent = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -355,18 +368,21 @@ async function handleSummarize(message, tabId, mode = 'SUMMARY') {
         try {
           const parsed = JSON.parse(data);
           if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-            chrome.tabs.sendMessage(tabId, { type: `${PREFIX}_CHUNK`, text: parsed.delta.text });
+            safeSend(tabId, { type: `${PREFIX}_CHUNK`, text: parsed.delta.text });
           }
-          if (parsed.type === 'message_stop') {
-            chrome.tabs.sendMessage(tabId, { type: `${PREFIX}_DONE` });
+          if (parsed.type === 'message_stop' && !doneSent) {
+            safeSend(tabId, { type: `${PREFIX}_DONE` });
+            doneSent = true;
           }
         } catch {}
       }
     }
 
-    chrome.tabs.sendMessage(tabId, { type: `${PREFIX}_DONE` });
+    if (!doneSent) {
+      safeSend(tabId, { type: `${PREFIX}_DONE` });
+    }
   } catch (err) {
-    chrome.tabs.sendMessage(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
   }
 }
 
@@ -375,7 +391,7 @@ async function handleChat(message, tabId) {
   const { transcript, messages, apiKey, model } = message;
 
   if (!apiKey) {
-    chrome.tabs.sendMessage(tabId, { type: 'CHAT_ERROR', error: '请先在扩展设置中填入 Claude API Key' });
+    safeSend(tabId, { type: 'CHAT_ERROR', error: '请先在扩展设置中填入 Claude API Key' });
     return;
   }
 
@@ -408,13 +424,14 @@ ${transcript}`;
 
     if (!response.ok) {
       const err = await response.text();
-      chrome.tabs.sendMessage(tabId, { type: 'CHAT_ERROR', error: `API 错误 (${response.status}): ${err}` });
+      safeSend(tabId, { type: 'CHAT_ERROR', error: `API 错误 (${response.status}): ${err}` });
       return;
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let doneSent = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -431,17 +448,20 @@ ${transcript}`;
         try {
           const parsed = JSON.parse(data);
           if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-            chrome.tabs.sendMessage(tabId, { type: 'CHAT_CHUNK', text: parsed.delta.text });
+            safeSend(tabId, { type: 'CHAT_CHUNK', text: parsed.delta.text });
           }
-          if (parsed.type === 'message_stop') {
-            chrome.tabs.sendMessage(tabId, { type: 'CHAT_DONE' });
+          if (parsed.type === 'message_stop' && !doneSent) {
+            safeSend(tabId, { type: 'CHAT_DONE' });
+            doneSent = true;
           }
         } catch {}
       }
     }
 
-    chrome.tabs.sendMessage(tabId, { type: 'CHAT_DONE' });
+    if (!doneSent) {
+      safeSend(tabId, { type: 'CHAT_DONE' });
+    }
   } catch (err) {
-    chrome.tabs.sendMessage(tabId, { type: 'CHAT_ERROR', error: `请求失败: ${err.message}` });
+    safeSend(tabId, { type: 'CHAT_ERROR', error: `请求失败: ${err.message}` });
   }
 }

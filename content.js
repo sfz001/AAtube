@@ -44,6 +44,19 @@
 字幕内容：
 {transcript}`;
 
+  const MINDMAP_PROMPT = `请根据以下 YouTube 视频字幕内容，生成一个结构化的思维导图 JSON 数据。
+
+要求：
+1. 输出一个嵌套的 JSON 对象树，根节点是视频主题
+2. 每个节点格式：{"label": "节点标签", "time": "MM:SS", "children": [...]}
+3. time 字段可选，表示该内容对应的视频时间戳，没有则留空字符串
+4. 最多 4 层深度，每个节点标签不超过 30 个字
+5. 第一层为主题分类（3-7个），第二层为具体要点，第三四层为细节
+6. 严格输出 JSON，不要包含代码块标记或其他文字
+
+字幕内容：
+{transcript}`;
+
   let panel = null;
   let currentVideoId = null;
   let summaryText = '';
@@ -63,6 +76,13 @@
   let cardsData = [];        // [{front, back, time}]
   let cardsRawText = '';
   let isGeneratingCards = false;
+
+  // 思维导图状态
+  let mindmapData = null;
+  let mindmapRawText = '';
+  let isGeneratingMindmap = false;
+  let mindmapTransform = { x: 0, y: 0, scale: 1 };
+  let mindmapCollapsed = new Set();
 
   // ── 入口 ──────────────────────────────────────────────
   function init() {
@@ -87,6 +107,11 @@
     cardsData = [];
     cardsRawText = '';
     isGeneratingCards = false;
+    mindmapData = null;
+    mindmapRawText = '';
+    isGeneratingMindmap = false;
+    mindmapTransform = { x: 0, y: 0, scale: 1 };
+    mindmapCollapsed = new Set();
     waitForContainer(() => injectPanel());
   }
 
@@ -126,6 +151,10 @@
           <div id="ytx-actions-cards" style="display:none">
             <button id="ytx-generate-cards" class="ytx-btn ytx-btn-primary">生成卡片</button>
           </div>
+          <div id="ytx-actions-mindmap" style="display:none">
+            <button id="ytx-generate-mindmap" class="ytx-btn ytx-btn-primary">生成导图</button>
+            <button id="ytx-export-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">导出 SVG</button>
+          </div>
         </div>
       </div>
       <div id="ytx-tabs">
@@ -133,6 +162,7 @@
         <button class="ytx-tab" data-tab="html">笔记</button>
         <button class="ytx-tab" data-tab="chat">问答</button>
         <button class="ytx-tab" data-tab="cards">卡片</button>
+        <button class="ytx-tab" data-tab="mindmap">导图</button>
       </div>
       <div id="ytx-content">
         <div class="ytx-empty">点击「总结视频」获取 AI 总结</div>
@@ -151,6 +181,9 @@
       </div>
       <div id="ytx-content-cards">
         <div class="ytx-empty">点击「生成卡片」提取视频中的关键知识点</div>
+      </div>
+      <div id="ytx-content-mindmap">
+        <div class="ytx-empty">点击「生成导图」将视频内容生成思维导图</div>
       </div>
       <div id="ytx-transcript-section">
         <button id="ytx-transcript-toggle">
@@ -175,6 +208,8 @@
     });
     panel.querySelector('#ytx-clear-chat').addEventListener('click', clearChat);
     panel.querySelector('#ytx-generate-cards').addEventListener('click', startGenerateCards);
+    panel.querySelector('#ytx-generate-mindmap').addEventListener('click', startGenerateMindmap);
+    panel.querySelector('#ytx-export-mindmap').addEventListener('click', exportMindmapSvg);
     panel.querySelectorAll('.ytx-tab').forEach(tab => {
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
@@ -309,11 +344,12 @@
     panel.querySelectorAll('.ytx-tab').forEach(t => {
       t.classList.toggle('active', t.dataset.tab === tab);
     });
-    const tabs = ['summary', 'html', 'chat', 'cards'];
-    const contentIds = { summary: '#ytx-content', html: '#ytx-content-html', chat: '#ytx-content-chat', cards: '#ytx-content-cards' };
-    const actionIds = { summary: '#ytx-actions-summary', html: '#ytx-actions-html', chat: '#ytx-actions-chat', cards: '#ytx-actions-cards' };
+    const tabs = ['summary', 'html', 'chat', 'cards', 'mindmap'];
+    const contentIds = { summary: '#ytx-content', html: '#ytx-content-html', chat: '#ytx-content-chat', cards: '#ytx-content-cards', mindmap: '#ytx-content-mindmap' };
+    const actionIds = { summary: '#ytx-actions-summary', html: '#ytx-actions-html', chat: '#ytx-actions-chat', cards: '#ytx-actions-cards', mindmap: '#ytx-actions-mindmap' };
+    const flexTabs = ['chat', 'cards', 'mindmap'];
     tabs.forEach(t => {
-      panel.querySelector(contentIds[t]).style.display = t === tab ? (t === 'chat' || t === 'cards' ? 'flex' : 'block') : 'none';
+      panel.querySelector(contentIds[t]).style.display = t === tab ? (flexTabs.includes(t) ? 'flex' : 'block') : 'none';
       panel.querySelector(actionIds[t]).style.display = t === tab ? 'flex' : 'none';
     });
     if (tab === 'chat') {
@@ -529,6 +565,389 @@
     });
   }
 
+  // ── 思维导图 ─────────────────────────────────────────
+  async function startGenerateMindmap() {
+    if (isGeneratingMindmap) return;
+    isGeneratingMindmap = true;
+    mindmapRawText = '';
+    mindmapData = null;
+    mindmapCollapsed = new Set();
+    mindmapTransform = { x: 0, y: 0, scale: 1 };
+
+    const btn = panel.querySelector('#ytx-generate-mindmap');
+    const contentEl = panel.querySelector('#ytx-content-mindmap');
+    const exportBtn = panel.querySelector('#ytx-export-mindmap');
+    btn.disabled = true;
+    exportBtn.style.display = 'none';
+
+    try {
+      if (!transcriptData) {
+        btn.textContent = '获取字幕中...';
+        contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div></div>';
+        transcriptData = await fetchTranscript();
+        renderTranscript();
+      }
+
+      btn.textContent = '生成中...';
+      contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在生成思维导图...</span></div></div>';
+
+      const settings = await getSettings();
+      chrome.runtime.sendMessage({
+        type: 'GENERATE_MINDMAP',
+        transcript: transcriptData.full,
+        prompt: MINDMAP_PROMPT,
+        apiKey: settings.apiKey,
+        model: settings.model,
+      });
+    } catch (err) {
+      contentEl.innerHTML = `<div class="ytx-error" style="margin:14px 16px">${err.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = '生成导图';
+      isGeneratingMindmap = false;
+    }
+  }
+
+  // ── 思维导图 SVG 引擎 ──────────────────────────────────
+  function assignNodeIds(node, path = '0') {
+    node._id = path;
+    if (node.children) {
+      node.children.forEach((child, i) => assignNodeIds(child, `${path}-${i}`));
+    }
+  }
+
+  // 布局常量
+  const MM_NODE_HEIGHT = 36;
+  const MM_V_GAP = 18;
+  const MM_H_GAP = 80;
+  const MM_TOGGLE_SPACE = 24;
+
+  function measureNodeWidth(node) {
+    const label = node.label || '';
+    let charWidth = 0;
+    for (const ch of label) {
+      charWidth += ch.charCodeAt(0) > 0x7f ? 14 : 8;
+    }
+    let w = charWidth + 28; // text padding
+    if (node.time) w += 44;  // timestamp badge space
+    return Math.max(90, w);
+  }
+
+  function layoutMindmap(node, depth = 0) {
+    node._width = measureNodeWidth(node);
+    node._height = MM_NODE_HEIGHT;
+    node._depth = depth;
+
+    const isCollapsed = mindmapCollapsed.has(node._id);
+    const visibleChildren = (!isCollapsed && node.children && node.children.length > 0) ? node.children : [];
+
+    if (visibleChildren.length === 0) {
+      node._subtreeHeight = MM_NODE_HEIGHT;
+    } else {
+      visibleChildren.forEach(child => layoutMindmap(child, depth + 1));
+      const totalChildHeight = visibleChildren.reduce((sum, c) => sum + c._subtreeHeight, 0) + (visibleChildren.length - 1) * MM_V_GAP;
+      node._subtreeHeight = Math.max(MM_NODE_HEIGHT, totalChildHeight);
+    }
+    node._visibleChildren = visibleChildren;
+  }
+
+  function positionMindmap(node, x, y) {
+    node._x = x;
+    node._y = y;
+
+    if (node._visibleChildren && node._visibleChildren.length > 0) {
+      // H_GAP + extra space for toggle circle
+      const hasToggle = node.children && node.children.length > 0;
+      const childX = x + node._width + (hasToggle ? MM_TOGGLE_SPACE : 0) + MM_H_GAP;
+      const totalChildHeight = node._visibleChildren.reduce((sum, c) => sum + c._subtreeHeight, 0) + (node._visibleChildren.length - 1) * MM_V_GAP;
+      let childY = y + (node._subtreeHeight - totalChildHeight) / 2;
+      node._visibleChildren.forEach(child => {
+        const cy = childY + child._subtreeHeight / 2 - child._height / 2;
+        positionMindmap(child, childX, cy);
+        childY += child._subtreeHeight + MM_V_GAP;
+      });
+    }
+  }
+
+  function getMindmapBounds(node) {
+    let minX = node._x, minY = node._y;
+    const toggleExtra = (node.children && node.children.length > 0) ? MM_TOGGLE_SPACE : 0;
+    let maxX = node._x + node._width + toggleExtra, maxY = node._y + node._height;
+    if (node._visibleChildren) {
+      node._visibleChildren.forEach(child => {
+        const b = getMindmapBounds(child);
+        minX = Math.min(minX, b.minX);
+        minY = Math.min(minY, b.minY);
+        maxX = Math.max(maxX, b.maxX);
+        maxY = Math.max(maxY, b.maxY);
+      });
+    }
+    return { minX, minY, maxX, maxY };
+  }
+
+  function renderMindmap() {
+    if (!panel || !mindmapData) return;
+    const contentEl = panel.querySelector('#ytx-content-mindmap');
+
+    assignNodeIds(mindmapData);
+    layoutMindmap(mindmapData);
+    positionMindmap(mindmapData, 30, 30);
+
+    const bounds = getMindmapBounds(mindmapData);
+    const PAD = 40;
+    const treeW = bounds.maxX - bounds.minX + PAD * 2;
+    const treeH = bounds.maxY - bounds.minY + PAD * 2;
+
+    const DEPTH_COLORS = ['#7c3aed', '#ede9fe', '#f5f3ff', '#faf5ff'];
+    const DEPTH_TEXT_COLORS = ['#ffffff', '#5b21b6', '#6d28d9', '#7c3aed'];
+    const DEPTH_BORDER_COLORS = ['#7c3aed', '#c4b5fd', '#ddd6fe', '#e9d5ff'];
+
+    let edgesHtml = '';
+    let nodesHtml = '';
+
+    function renderEdges(node) {
+      if (!node._visibleChildren) return;
+      node._visibleChildren.forEach(child => {
+        const hasToggle = node.children && node.children.length > 0;
+        const x1 = node._x + node._width + (hasToggle ? MM_TOGGLE_SPACE : 0);
+        const y1 = node._y + node._height / 2;
+        const x2 = child._x;
+        const y2 = child._y + child._height / 2;
+        const dx = x2 - x1;
+        const cx1 = x1 + dx * 0.45;
+        const cx2 = x2 - dx * 0.45;
+        edgesHtml += `<path d="M${x1},${y1} C${cx1},${y1} ${cx2},${y2} ${x2},${y2}" fill="none" stroke="#c4b5fd" stroke-width="2" opacity="0.7"/>`;
+        renderEdges(child);
+      });
+    }
+
+    function renderNodes(node) {
+      const d = Math.min(node._depth, 3);
+      const fill = DEPTH_COLORS[d];
+      const textColor = DEPTH_TEXT_COLORS[d];
+      const borderColor = DEPTH_BORDER_COLORS[d];
+      const rx = d === 0 ? 18 : 10;
+      const fontSize = d === 0 ? 14 : 12;
+
+      nodesHtml += `<g class="ytx-mm-node" data-id="${node._id}">`;
+      nodesHtml += `<rect x="${node._x}" y="${node._y}" width="${node._width}" height="${node._height}" rx="${rx}" fill="${fill}" stroke="${borderColor}" stroke-width="1.5"/>`;
+
+      // Label text — centered, or left-aligned if timestamp present
+      const textX = node._x + 14;
+      const textY = node._y + node._height / 2;
+      const maxTextW = node._width - 28 - (node.time ? 44 : 0);
+      nodesHtml += `<text x="${textX}" y="${textY}" fill="${textColor}" font-size="${fontSize}" font-weight="${d === 0 ? 600 : 500}" text-anchor="start" dominant-baseline="central" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"><tspan textLength="${Math.max(0, maxTextW)}" lengthAdjust="spacing">${escapeHtml(node.label || '')}</tspan></text>`;
+
+      // Timestamp badge
+      if (node.time) {
+        const badgeW = 40;
+        const badgeX = node._x + node._width - badgeW - 6;
+        const badgeY = node._y + node._height / 2;
+        const secs = timeToSeconds(node.time);
+        nodesHtml += `<g class="ytx-mm-timestamp" data-time="${secs}" style="cursor:pointer">`;
+        nodesHtml += `<rect x="${badgeX}" y="${badgeY - 10}" width="${badgeW}" height="20" rx="10" fill="${d === 0 ? 'rgba(255,255,255,0.25)' : '#ede9fe'}" stroke="none"/>`;
+        nodesHtml += `<text x="${badgeX + badgeW / 2}" y="${badgeY}" fill="${d === 0 ? '#fff' : '#7c3aed'}" font-size="10" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Consolas,Monaco,monospace">${node.time}</text>`;
+        nodesHtml += `</g>`;
+      }
+
+      // Collapse/expand toggle
+      if (node.children && node.children.length > 0) {
+        const cx = node._x + node._width + MM_TOGGLE_SPACE / 2;
+        const cy = node._y + node._height / 2;
+        const isCollapsed = mindmapCollapsed.has(node._id);
+        nodesHtml += `<g class="ytx-mm-toggle" data-id="${node._id}" style="cursor:pointer">`;
+        nodesHtml += `<circle cx="${cx}" cy="${cy}" r="8" fill="#fff" stroke="#c4b5fd" stroke-width="1.5"/>`;
+        nodesHtml += `<text x="${cx}" y="${cy}" fill="#7c3aed" font-size="12" font-weight="700" text-anchor="middle" dominant-baseline="central">${isCollapsed ? '+' : '−'}</text>`;
+        nodesHtml += `</g>`;
+      }
+
+      nodesHtml += `</g>`;
+
+      if (node._visibleChildren) {
+        node._visibleChildren.forEach(child => renderNodes(child));
+      }
+    }
+
+    renderEdges(mindmapData);
+    renderNodes(mindmapData);
+
+    contentEl.innerHTML = `
+      <div class="ytx-mindmap-toolbar">
+        <button class="ytx-mm-zoom-btn" data-action="zoom-in" title="放大">+</button>
+        <button class="ytx-mm-zoom-btn" data-action="zoom-out" title="缩小">−</button>
+        <button class="ytx-mm-zoom-btn" data-action="zoom-reset" title="重置">⟲</button>
+      </div>
+      <div class="ytx-mindmap-viewport">
+        <svg class="ytx-mindmap-svg" xmlns="http://www.w3.org/2000/svg">
+          <g class="ytx-mm-canvas">
+            ${edgesHtml}
+            ${nodesHtml}
+          </g>
+        </svg>
+      </div>
+    `;
+
+    // Auto-fit: calculate transform to fit tree in viewport
+    const viewport = contentEl.querySelector('.ytx-mindmap-viewport');
+    const svg = contentEl.querySelector('.ytx-mindmap-svg');
+    const canvas = contentEl.querySelector('.ytx-mm-canvas');
+    if (viewport && svg && canvas) {
+      const vw = viewport.clientWidth || 400;
+      const vh = viewport.clientHeight || 400;
+      svg.setAttribute('width', vw);
+      svg.setAttribute('height', vh);
+
+      // Only auto-fit on first render (scale === 1 and no offset)
+      if (mindmapTransform.scale === 1 && mindmapTransform.x === 0 && mindmapTransform.y === 0) {
+        const scaleX = vw / treeW;
+        const scaleY = vh / treeH;
+        const fitScale = Math.min(scaleX, scaleY, 1.5) * 0.92; // 92% to leave margin
+        const offsetX = (vw - treeW * fitScale) / 2;
+        const offsetY = (vh - treeH * fitScale) / 2;
+        mindmapTransform = { x: offsetX, y: offsetY, scale: fitScale };
+      }
+      canvas.setAttribute('transform', `translate(${mindmapTransform.x},${mindmapTransform.y}) scale(${mindmapTransform.scale})`);
+    }
+
+    setupMindmapZoomPan(contentEl);
+    setupMindmapToolbar(contentEl);
+    setupMindmapInteractions(contentEl);
+  }
+
+  function setupMindmapZoomPan(container) {
+    const viewport = container.querySelector('.ytx-mindmap-viewport');
+    const svg = container.querySelector('.ytx-mindmap-svg');
+    const canvas = container.querySelector('.ytx-mm-canvas');
+    if (!viewport || !svg || !canvas) return;
+
+    let isPanning = false;
+    let startX, startY, startTx, startTy;
+
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.ytx-mm-toggle, .ytx-mm-timestamp, .ytx-mm-node')) return;
+      isPanning = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startTx = mindmapTransform.x;
+      startTy = mindmapTransform.y;
+      viewport.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isPanning) return;
+      mindmapTransform.x = startTx + (e.clientX - startX);
+      mindmapTransform.y = startTy + (e.clientY - startY);
+      canvas.setAttribute('transform', `translate(${mindmapTransform.x},${mindmapTransform.y}) scale(${mindmapTransform.scale})`);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isPanning) return;
+      isPanning = false;
+      viewport.style.cursor = 'grab';
+    });
+
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const oldScale = mindmapTransform.scale;
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.max(0.2, Math.min(3, oldScale * delta));
+
+      // Zoom toward cursor
+      mindmapTransform.x = mouseX - (mouseX - mindmapTransform.x) * (newScale / oldScale);
+      mindmapTransform.y = mouseY - (mouseY - mindmapTransform.y) * (newScale / oldScale);
+      mindmapTransform.scale = newScale;
+
+      canvas.setAttribute('transform', `translate(${mindmapTransform.x},${mindmapTransform.y}) scale(${mindmapTransform.scale})`);
+    }, { passive: false });
+  }
+
+  function setupMindmapToolbar(container) {
+    container.querySelectorAll('.ytx-mm-zoom-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        const canvas = container.querySelector('.ytx-mm-canvas');
+        if (!canvas) return;
+
+        if (action === 'zoom-in') {
+          mindmapTransform.scale = Math.min(3, mindmapTransform.scale * 1.2);
+        } else if (action === 'zoom-out') {
+          mindmapTransform.scale = Math.max(0.2, mindmapTransform.scale * 0.8);
+        } else if (action === 'zoom-reset') {
+          // Re-fit to viewport
+          mindmapTransform = { x: 0, y: 0, scale: 1 };
+          renderMindmap();
+          return;
+        }
+        canvas.setAttribute('transform', `translate(${mindmapTransform.x},${mindmapTransform.y}) scale(${mindmapTransform.scale})`);
+      });
+    });
+  }
+
+  function setupMindmapInteractions(container) {
+    // Toggle collapse/expand
+    container.querySelectorAll('.ytx-mm-toggle').forEach(toggle => {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = toggle.dataset.id;
+        if (mindmapCollapsed.has(id)) {
+          mindmapCollapsed.delete(id);
+        } else {
+          mindmapCollapsed.add(id);
+        }
+        renderMindmap();
+      });
+    });
+
+    // Timestamp click → jump video
+    container.querySelectorAll('.ytx-mm-timestamp').forEach(ts => {
+      ts.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const time = parseInt(ts.dataset.time, 10);
+        if (isNaN(time)) return;
+        const video = document.querySelector('video');
+        if (video) { video.currentTime = time; video.play(); }
+      });
+    });
+  }
+
+  function exportMindmapSvg() {
+    if (!panel || !mindmapData) return;
+    const svgEl = panel.querySelector('.ytx-mindmap-svg');
+    if (!svgEl) return;
+
+    // Recalculate bounds for proper export dimensions
+    const bounds = getMindmapBounds(mindmapData);
+    const PAD = 40;
+    const exportW = bounds.maxX - bounds.minX + PAD * 2;
+    const exportH = bounds.maxY - bounds.minY + PAD * 2;
+
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('width', exportW);
+    clone.setAttribute('height', exportH);
+    const canvas = clone.querySelector('.ytx-mm-canvas');
+    if (canvas) canvas.setAttribute('transform', 'translate(0,0) scale(1)');
+
+    // Add white background
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('width', exportW);
+    bg.setAttribute('height', exportH);
+    bg.setAttribute('fill', '#fff');
+    clone.insertBefore(bg, clone.firstChild);
+
+    const svgData = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mindmap-${currentVideoId || 'video'}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ── 字幕获取（全部通过 background.js 代理）─────────────
   async function fetchTranscript() {
     const videoId = currentVideoId;
@@ -681,6 +1100,34 @@
       panel.querySelector('#ytx-generate-cards').disabled = false;
       panel.querySelector('#ytx-generate-cards').textContent = '生成卡片';
       isGeneratingCards = false;
+    }
+
+    // ── 思维导图消息 ──
+    if (message.type === 'MINDMAP_CHUNK') {
+      mindmapRawText += message.text;
+    }
+    if (message.type === 'MINDMAP_DONE') {
+      try {
+        const jsonMatch = mindmapRawText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          mindmapData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('未找到有效的 JSON 数据');
+        }
+        renderMindmap();
+        panel.querySelector('#ytx-export-mindmap').style.display = 'inline-block';
+      } catch (err) {
+        panel.querySelector('#ytx-content-mindmap').innerHTML = `<div class="ytx-error" style="margin:14px 16px">导图解析失败: ${err.message}</div>`;
+      }
+      panel.querySelector('#ytx-generate-mindmap').disabled = false;
+      panel.querySelector('#ytx-generate-mindmap').textContent = '重新生成';
+      isGeneratingMindmap = false;
+    }
+    if (message.type === 'MINDMAP_ERROR') {
+      panel.querySelector('#ytx-content-mindmap').innerHTML = `<div class="ytx-error" style="margin:14px 16px">${message.error}</div>`;
+      panel.querySelector('#ytx-generate-mindmap').disabled = false;
+      panel.querySelector('#ytx-generate-mindmap').textContent = '生成导图';
+      isGeneratingMindmap = false;
     }
   });
 
