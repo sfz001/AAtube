@@ -1,4 +1,4 @@
-// background.js — Service Worker: 字幕获取 + Claude API 流式调用
+// background.js — Service Worker: 字幕获取 + 多模型 API 流式调用
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'FETCH_TRANSCRIPT') {
@@ -34,7 +34,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ── 字幕获取 ────────────────────────────────────────────
-// 方案：打开 YouTube 自带的字幕面板，从 DOM 中读取字幕内容
 async function handleFetchTranscript(videoId, tabId) {
   try {
     const results = await chrome.scripting.executeScript({
@@ -93,7 +92,6 @@ async function scrapeTranscriptFromDOM(videoId) {
       }
 
       // === 步骤2: 在描述区找 "显示转录稿" 按钮 ===
-      // YouTube 的转录按钮在 ytd-video-description-transcript-section-renderer 内
       const transcriptSection = document.querySelector('ytd-video-description-transcript-section-renderer');
       if (transcriptSection) {
         const btn = transcriptSection.querySelector('button')
@@ -110,7 +108,6 @@ async function scrapeTranscriptFromDOM(videoId) {
       if (!opened) {
         addLog('尝试通过 "..." 菜单...');
 
-        // 找到视频操作区的 "..." 按钮
         const moreButtons = document.querySelectorAll(
           'ytd-watch-metadata ytd-menu-renderer button, ' +
           'ytd-watch-metadata ytd-menu-renderer yt-button-shape button, ' +
@@ -121,13 +118,11 @@ async function scrapeTranscriptFromDOM(videoId) {
         let moreBtn = null;
         for (const btn of moreButtons) {
           const label = btn.getAttribute('aria-label') || '';
-          // "更多操作" (中文) / "More actions" (英文)
           if (label.includes('更多') || label.includes('More') || label.includes('操作')) {
             moreBtn = btn;
             break;
           }
         }
-        // 如果没找到带 label 的，取菜单中最后一个按钮（通常是 "..."）
         if (!moreBtn && moreButtons.length > 0) {
           moreBtn = moreButtons[moreButtons.length - 1];
         }
@@ -137,7 +132,6 @@ async function scrapeTranscriptFromDOM(videoId) {
           moreBtn.click();
           await sleep(500);
 
-          // 在弹出菜单中找 "显示转录稿" / "Show transcript"
           const menuItems = document.querySelectorAll(
             'tp-yt-paper-listbox ytd-menu-service-item-renderer, ' +
             'ytd-menu-popup-renderer ytd-menu-service-item-renderer, ' +
@@ -158,9 +152,8 @@ async function scrapeTranscriptFromDOM(videoId) {
             }
           }
 
-          // 如果没找到，关闭菜单
           if (!opened) {
-            document.body.click(); // 关闭弹出菜单
+            document.body.click();
             await sleep(200);
           }
         } else {
@@ -168,7 +161,7 @@ async function scrapeTranscriptFromDOM(videoId) {
         }
       }
 
-      // === 步骤4: 暴力搜索页面上所有包含"转录"文字的可点击元素 ===
+      // === 步骤4: 暴力搜索 ===
       if (!opened) {
         addLog('暴力搜索转录按钮...');
         const clickables = document.querySelectorAll('button, a, [role="button"], ytd-button-renderer, yt-formatted-string');
@@ -212,10 +205,6 @@ async function scrapeTranscriptFromDOM(videoId) {
     // 从 DOM 中读取字幕段落
     const segments = [];
 
-    // YouTube 字幕面板的 DOM 结构:
-    // ytd-transcript-segment-renderer 包含每个字幕段
-    //   .segment-timestamp 包含时间戳
-    //   .segment-text 或 yt-formatted-string 包含文本
     const segmentElements = transcriptPanel.querySelectorAll(
       'ytd-transcript-segment-renderer, ytd-transcript-segment-list-renderer .segment'
     );
@@ -223,17 +212,14 @@ async function scrapeTranscriptFromDOM(videoId) {
     addLog('找到 segment 元素: ' + segmentElements.length);
 
     if (segmentElements.length === 0) {
-      // 可能还在加载，再等等
       await sleep(1500);
       const retryElements = transcriptPanel.querySelectorAll('ytd-transcript-segment-renderer');
       addLog('重试找到 segment: ' + retryElements.length);
 
       if (retryElements.length === 0) {
-        // 尝试其他选择器
         const allText = transcriptPanel.innerText;
         addLog('面板文本长度: ' + allText.length + ' 前200字: ' + allText.substring(0, 200));
 
-        // 如果有文本但没有标准结构，尝试解析纯文本
         if (allText.length > 50) {
           const lines = allText.split('\n').filter(l => l.trim());
           let currentTime = 0;
@@ -246,7 +232,7 @@ async function scrapeTranscriptFromDOM(videoId) {
               currentTime = h * 3600 + m * 60 + s;
             } else if (line.trim() && currentTime >= 0) {
               segments.push({ start: currentTime, text: line.trim() });
-              currentTime = -1; // 防止重复
+              currentTime = -1;
             }
           }
           addLog('纯文本解析段数: ' + segments.length);
@@ -313,85 +299,47 @@ function safeSend(tabId, msg) {
   } catch {}
 }
 
-// ── Claude API 流式调用 ────────────────────────────────
-async function handleSummarize(message, tabId, mode = 'SUMMARY') {
-  const { transcript, prompt, apiKey, model } = message;
-  const PREFIX = mode; // 'SUMMARY' or 'HTML'
+// ── 根据 provider 获取对应 API Key ─────────────────────
+function getActiveKey(message) {
+  const provider = message.provider || 'claude';
+  if (provider === 'openai') return message.openaiKey;
+  if (provider === 'gemini') return message.geminiKey;
+  return message.apiKey; // claude (向下兼容)
+}
 
-  if (!apiKey) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: '请先在扩展设置中填入 Claude API Key' });
+// ── 总结/生成路由 ────────────────────────────────────────
+async function handleSummarize(message, tabId, mode = 'SUMMARY') {
+  const { transcript, prompt, model } = message;
+  const provider = message.provider || 'claude';
+  const activeKey = getActiveKey(message);
+  const PREFIX = mode;
+
+  if (!activeKey) {
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: '请先在扩展设置中填入 API Key' });
     return;
   }
 
   const fullPrompt = prompt.replace('{transcript}', transcript);
+  const opts = { key: activeKey, model, userPrompt: fullPrompt, maxTokens: 8096, tabId, PREFIX };
 
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: model || 'claude-sonnet-4-6',
-        max_tokens: 8096,
-        stream: true,
-        messages: [{ role: 'user', content: fullPrompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
-      return;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let doneSent = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6);
-        if (data === '[DONE]') continue;
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-            safeSend(tabId, { type: `${PREFIX}_CHUNK`, text: parsed.delta.text });
-          }
-          if (parsed.type === 'message_stop' && !doneSent) {
-            safeSend(tabId, { type: `${PREFIX}_DONE` });
-            doneSent = true;
-          }
-        } catch {}
-      }
-    }
-
-    if (!doneSent) {
-      safeSend(tabId, { type: `${PREFIX}_DONE` });
-    }
-  } catch (err) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+  if (provider === 'openai') {
+    await callOpenAI(opts);
+  } else if (provider === 'gemini') {
+    await callGemini(opts);
+  } else {
+    await callClaude(opts);
   }
 }
 
-// ── 多轮对话（互动问答）────────────────────────────────
+// ── 多轮对话路由 ─────────────────────────────────────────
 async function handleChat(message, tabId) {
-  const { transcript, messages, apiKey, model } = message;
+  const { transcript, messages, model } = message;
+  const provider = message.provider || 'claude';
+  const activeKey = getActiveKey(message);
+  const PREFIX = 'CHAT';
 
-  if (!apiKey) {
-    safeSend(tabId, { type: 'CHAT_ERROR', error: '请先在扩展设置中填入 Claude API Key' });
+  if (!activeKey) {
+    safeSend(tabId, { type: 'CHAT_ERROR', error: '请先在扩展设置中填入 API Key' });
     return;
   }
 
@@ -404,18 +352,64 @@ async function handleChat(message, tabId) {
 字幕内容：
 ${transcript}`;
 
+  const opts = { key: activeKey, model, systemPrompt, messages, maxTokens: 4096, tabId, PREFIX };
+
+  if (provider === 'openai') {
+    await callOpenAIChat(opts);
+  } else if (provider === 'gemini') {
+    await callGeminiChat(opts);
+  } else {
+    await callClaudeChat(opts);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// Claude API
+// ══════════════════════════════════════════════════════════
+
+async function callClaude({ key, model, userPrompt, maxTokens, tabId, PREFIX }) {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': key,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
         model: model || 'claude-sonnet-4-6',
-        max_tokens: 4096,
+        max_tokens: maxTokens,
+        stream: true,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
+      return;
+    }
+
+    await readClaudeStream(response, tabId, PREFIX);
+  } catch (err) {
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+  }
+}
+
+async function callClaudeChat({ key, model, systemPrompt, messages, maxTokens, tabId, PREFIX }) {
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: model || 'claude-sonnet-4-6',
+        max_tokens: maxTokens,
         stream: true,
         system: systemPrompt,
         messages: messages,
@@ -424,44 +418,254 @@ ${transcript}`;
 
     if (!response.ok) {
       const err = await response.text();
-      safeSend(tabId, { type: 'CHAT_ERROR', error: `API 错误 (${response.status}): ${err}` });
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
       return;
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let doneSent = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6);
-        if (data === '[DONE]') continue;
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-            safeSend(tabId, { type: 'CHAT_CHUNK', text: parsed.delta.text });
-          }
-          if (parsed.type === 'message_stop' && !doneSent) {
-            safeSend(tabId, { type: 'CHAT_DONE' });
-            doneSent = true;
-          }
-        } catch {}
-      }
-    }
-
-    if (!doneSent) {
-      safeSend(tabId, { type: 'CHAT_DONE' });
-    }
+    await readClaudeStream(response, tabId, PREFIX);
   } catch (err) {
-    safeSend(tabId, { type: 'CHAT_ERROR', error: `请求失败: ${err.message}` });
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+  }
+}
+
+async function readClaudeStream(response, tabId, PREFIX) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let doneSent = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6);
+      if (data === '[DONE]') continue;
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+          safeSend(tabId, { type: `${PREFIX}_CHUNK`, text: parsed.delta.text });
+        }
+        if (parsed.type === 'message_stop' && !doneSent) {
+          safeSend(tabId, { type: `${PREFIX}_DONE` });
+          doneSent = true;
+        }
+      } catch {}
+    }
+  }
+
+  if (!doneSent) {
+    safeSend(tabId, { type: `${PREFIX}_DONE` });
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// OpenAI API
+// ══════════════════════════════════════════════════════════
+
+async function callOpenAI({ key, model, userPrompt, maxTokens, tabId, PREFIX }) {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: model || 'gpt-5-mini',
+        messages: [{ role: 'user', content: userPrompt }],
+        max_completion_tokens: maxTokens,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
+      return;
+    }
+
+    await readOpenAIStream(response, tabId, PREFIX);
+  } catch (err) {
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+  }
+}
+
+async function callOpenAIChat({ key, model, systemPrompt, messages, maxTokens, tabId, PREFIX }) {
+  try {
+    const apiMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ];
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: model || 'gpt-5-mini',
+        messages: apiMessages,
+        max_completion_tokens: maxTokens,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
+      return;
+    }
+
+    await readOpenAIStream(response, tabId, PREFIX);
+  } catch (err) {
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+  }
+}
+
+async function readOpenAIStream(response, tabId, PREFIX) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let doneSent = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') {
+        if (!doneSent) {
+          safeSend(tabId, { type: `${PREFIX}_DONE` });
+          doneSent = true;
+        }
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(data);
+        const text = parsed.choices?.[0]?.delta?.content;
+        if (text) {
+          safeSend(tabId, { type: `${PREFIX}_CHUNK`, text });
+        }
+        if (parsed.choices?.[0]?.finish_reason === 'stop' && !doneSent) {
+          safeSend(tabId, { type: `${PREFIX}_DONE` });
+          doneSent = true;
+        }
+      } catch {}
+    }
+  }
+
+  if (!doneSent) {
+    safeSend(tabId, { type: `${PREFIX}_DONE` });
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// Gemini API
+// ══════════════════════════════════════════════════════════
+
+async function callGemini({ key, model, userPrompt, maxTokens, tabId, PREFIX }) {
+  const modelId = model || 'gemini-3-flash-preview';
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse&key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig: { maxOutputTokens: maxTokens },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.text();
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
+      return;
+    }
+
+    await readGeminiStream(response, tabId, PREFIX);
+  } catch (err) {
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+  }
+}
+
+async function callGeminiChat({ key, model, systemPrompt, messages, maxTokens, tabId, PREFIX }) {
+  const modelId = model || 'gemini-3-flash-preview';
+  try {
+    // Convert chat messages to Gemini format
+    const contents = messages.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse&key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents,
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: { maxOutputTokens: maxTokens },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.text();
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
+      return;
+    }
+
+    await readGeminiStream(response, tabId, PREFIX);
+  } catch (err) {
+    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+  }
+}
+
+async function readGeminiStream(response, tabId, PREFIX) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let doneSent = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (!data) continue;
+      try {
+        const parsed = JSON.parse(data);
+        const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          safeSend(tabId, { type: `${PREFIX}_CHUNK`, text });
+        }
+      } catch {}
+    }
+  }
+
+  if (!doneSent) {
+    safeSend(tabId, { type: `${PREFIX}_DONE` });
   }
 }

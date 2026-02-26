@@ -390,7 +390,10 @@
         type: 'GENERATE_HTML',
         transcript: transcriptData.full,
         prompt: HTML_PROMPT,
+        provider: settings.provider,
         apiKey: settings.apiKey,
+        openaiKey: settings.openaiKey,
+        geminiKey: settings.geminiKey,
         model: settings.model,
       });
 
@@ -473,7 +476,10 @@
         type: 'CHAT_ASK',
         transcript: transcriptData.full,
         messages: chatMessages,
+        provider: settings.provider,
         apiKey: settings.apiKey,
+        openaiKey: settings.openaiKey,
+        geminiKey: settings.geminiKey,
         model: settings.model,
       });
     } catch (err) {
@@ -518,7 +524,10 @@
         type: 'GENERATE_CARDS',
         transcript: transcriptData.full,
         prompt: CARDS_PROMPT,
+        provider: settings.provider,
         apiKey: settings.apiKey,
+        openaiKey: settings.openaiKey,
+        geminiKey: settings.geminiKey,
         model: settings.model,
       });
     } catch (err) {
@@ -596,7 +605,10 @@
         type: 'GENERATE_MINDMAP',
         transcript: transcriptData.full,
         prompt: MINDMAP_PROMPT,
+        provider: settings.provider,
         apiKey: settings.apiKey,
+        openaiKey: settings.openaiKey,
+        geminiKey: settings.geminiKey,
         model: settings.model,
       });
     } catch (err) {
@@ -991,7 +1003,10 @@
         type: 'SUMMARIZE',
         transcript: transcriptData.full,
         prompt: settings.prompt || DEFAULT_PROMPT,
+        provider: settings.provider,
         apiKey: settings.apiKey,
+        openaiKey: settings.openaiKey,
+        geminiKey: settings.geminiKey,
         model: settings.model,
       });
 
@@ -1228,7 +1243,7 @@
 
   function getSettings() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get(['apiKey', 'model', 'prompt'], resolve);
+      chrome.storage.sync.get(['provider', 'apiKey', 'openaiKey', 'geminiKey', 'model', 'prompt'], resolve);
     });
   }
 

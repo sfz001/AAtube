@@ -36,6 +36,34 @@ h1 {
   margin-bottom: 16px;
 }
 
+.provider-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.provider-tab {
+  flex: 1;
+  padding: 7px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafafa;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.provider-tab:hover {
+  background: #f0f0f0;
+}
+
+.provider-tab.active {
+  background: #7c3aed;
+  color: #fff;
+  border-color: #7c3aed;
+}
+
 .field {
   margin-bottom: 12px;
 }
