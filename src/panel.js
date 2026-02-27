@@ -146,7 +146,7 @@
       '</div>' +
       '<div id="ytx-tabs">' + tabsHtml + '</div>' +
       '<div id="ytx-video-mode-banner" style="display:none">' +
-        '<span>当前使用 Gemini 视频模式分析</span>' +
+        '<span>已通过 Gemini 视频模式获取内容</span>' +
         '<button id="ytx-video-mode-close" title="关闭提示">\u00D7</button>' +
       '</div>' +
       contentHtml +
@@ -187,7 +187,7 @@
     // 绑定「使用视频模式」按钮
     panel.querySelector('#ytx-use-video-mode').addEventListener('click', function () {
       var btn = panel.querySelector('#ytx-use-video-mode');
-      if (btn) { btn.disabled = true; btn.textContent = '切换中...'; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Gemini视频模式中...'; }
       YTX.switchToVideoMode().then(function () {
         // 切换成功后隐藏按钮
         if (btn) btn.style.display = 'none';
@@ -245,7 +245,7 @@
     if (!YTX.transcriptData.segments) {
       var lines = YTX.transcriptData.full.split('\n').filter(function (l) { return l.trim(); });
       body.innerHTML =
-        '<div class="ytx-warning" style="padding:6px 12px;font-size:11px;color:#7c3aed;background:#ede9fe;border-radius:6px;margin-bottom:6px">该视频无字幕，以下为 Gemini 视频分析内容</div>' +
+        '<div class="ytx-warning" style="padding:6px 12px;font-size:11px;color:#7c3aed;background:#ede9fe;border-radius:6px;margin-bottom:6px">以下为 Gemini 视频模式获取的内容</div>' +
         lines.map(function (line) {
           var m = line.match(/^\[(\d+:\d+)\]\s*(.*)/);
           if (m) {

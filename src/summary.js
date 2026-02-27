@@ -19,8 +19,8 @@ YTX.features.summary = {
   },
 
   actionsHtml: function () {
-    return '<button id="ytx-summarize" class="ytx-btn ytx-btn-primary">总结视频</button>' +
-           '<button id="ytx-generate-all" class="ytx-btn ytx-btn-secondary">全部生成</button>';
+    return '<button id="ytx-generate-all" class="ytx-btn ytx-btn-primary">全部生成</button>' +
+           '<button id="ytx-summarize" class="ytx-btn ytx-btn-secondary">总结视频</button>';
   },
 
   contentHtml: function () {

@@ -37,8 +37,7 @@ YTX.getSettings = function () {
     chrome.storage.sync.get(
       ['provider', 'apiKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt'],
       function (data) {
-        // 视频模式（无字幕）时自动切换到 Gemini
-        var provider = (YTX.videoMode && data.geminiKey) ? 'gemini' : (data.provider || 'claude');
+        var provider = data.provider || 'claude';
         var KEY_MAP = { claude: 'apiKey', openai: 'openaiKey', gemini: 'geminiKey' };
         var MODEL_MAP = { claude: 'claudeModel', openai: 'openaiModel', gemini: 'geminiModel' };
         resolve({
@@ -145,7 +144,7 @@ YTX._analyzeVideoWithGemini = async function () {
 
   if (YTX.panel) {
     var body = YTX.panel.querySelector('#ytx-transcript-body');
-    if (body) body.innerHTML = '<div class="ytx-warning" style="padding:8px 12px;font-size:12px;color:#7c3aed;background:#ede9fe;border-radius:6px">正在使用 Gemini 分析视频内容...</div>';
+    if (body) body.innerHTML = '<div class="ytx-warning" style="padding:8px 12px;font-size:12px;color:#7c3aed;background:#ede9fe;border-radius:6px">正在通过 Gemini 视频模式获取内容...</div>';
   }
 
   var videoUrl = YTX.getVideoUrl();
