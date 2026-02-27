@@ -281,31 +281,20 @@ YTX.switchToVideoMode = async function () {
     if (b) b.disabled = true;
   });
 
-  // 清空已有字幕数据
+  // 清空字幕数据（保留各模块已生成的内容）
   YTX.transcriptData = null;
-
-  // 重置所有功能模块的已生成内容
-  YTX.featureOrder.forEach(function (key) {
-    var f = YTX.features[key];
-    if (f && f.reset) f.reset();
-  });
-
-  // 重新渲染各模块的空状态
-  if (YTX.panel) {
-    YTX.featureOrder.forEach(function (key) {
-      var f = YTX.features[key];
-      var el = YTX.panel.querySelector('#' + f.contentId);
-      if (el) el.innerHTML = f.contentHtml();
-    });
-    // 重新绑定事件
-    YTX.featureOrder.forEach(function (key) {
-      var f = YTX.features[key];
-      if (f && f.bindEvents) f.bindEvents(YTX.panel);
-    });
-  }
 
   try {
     await YTX._analyzeVideoWithGemini();
+    // 缓存视频模式字幕
+    if (YTX.transcriptData && YTX.currentVideoId) {
+      YTX.cache.save(YTX.currentVideoId, 'transcript', {
+        segments: null,
+        full: YTX.transcriptData.full,
+        truncated: false,
+        videoMode: true,
+      });
+    }
   } finally {
     YTX.isFetchingTranscript = false;
     // 恢复所有生成按钮
@@ -404,17 +393,10 @@ YTX.generateAll = async function () {
   var allBtn = YTX.panel && YTX.panel.querySelector('#ytx-generate-all');
   if (allBtn) { allBtn.blur(); allBtn.disabled = true; allBtn.innerHTML = YTX.icons.spinner; }
 
-  // 立即禁用所有功能按钮，避免等待字幕期间按钮仍可点击
-  var btnIds = ['#ytx-summarize', '#ytx-generate-html', '#ytx-generate-cards', '#ytx-generate-mindmap', '#ytx-generate-vocab'];
-  btnIds.forEach(function (id) {
-    var b = YTX.panel && YTX.panel.querySelector(id);
-    if (b) { b.disabled = true; b.innerHTML = YTX.icons.spinner; }
-  });
-
   // 先统一拿字幕，避免各模块重复获取
   await YTX.ensureTranscript();
 
-  // 同时启动所有模块
+  // 同时启动所有模块，各模块自己管理按钮状态
   var promises = keys.map(function (key) {
     var f = YTX.features[key];
     if (!f || !f.start || f.isGenerating) return Promise.resolve();
@@ -425,15 +407,12 @@ YTX.generateAll = async function () {
         f.onDone = origDone;
         f.onError = origError;
         origDone.call(f);
-        // 批量生成期间保持按钮禁用
-        btnIds.forEach(function (id) { var b = YTX.panel && YTX.panel.querySelector(id); if (b) b.disabled = true; });
         resolve();
       };
       f.onError = function (err) {
         f.onDone = origDone;
         f.onError = origError;
         origError.call(f, err);
-        btnIds.forEach(function (id) { var b = YTX.panel && YTX.panel.querySelector(id); if (b) b.disabled = true; });
         resolve();
       };
       f.start();
@@ -442,5 +421,4 @@ YTX.generateAll = async function () {
 
   await Promise.all(promises);
   if (allBtn) { allBtn.disabled = false; allBtn.innerHTML = YTX.icons.zap; }
-  btnIds.forEach(function (id) { var b = YTX.panel && YTX.panel.querySelector(id); if (b) b.disabled = false; });
 };

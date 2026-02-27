@@ -84,7 +84,7 @@ YTX.features.vocab = {
     YTX.panel.querySelector('#ytx-generate-vocab').disabled = false;
     YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-vocab'));
     this.isGenerating = false;
-    if (this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'vocab', { data: this.data });
+    if (this.data && this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'vocab', { data: this.data });
   },
 
   onError: function (error) {

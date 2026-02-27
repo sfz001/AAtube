@@ -84,7 +84,7 @@ YTX.features.cards = {
     YTX.panel.querySelector('#ytx-generate-cards').disabled = false;
     YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-cards'));
     this.isGenerating = false;
-    if (this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'cards', { data: this.data });
+    if (this.data && this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'cards', { data: this.data });
   },
 
   onError: function (error) {

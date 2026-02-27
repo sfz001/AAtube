@@ -333,22 +333,36 @@
     columns.style.flexWrap = 'nowrap';
 
     // 默认分栏：视频占 3/5，AATube 占 2/5
-    var totalWidth = columns.getBoundingClientRect().width;
     var resizerWidth = 24;
-    var primaryWidth = Math.round((totalWidth - resizerWidth) * 3 / 5);
-    var secondaryWidth = totalWidth - primaryWidth - resizerWidth;
+    var splitRatio = 3 / 5; // 当前 primary 占比，拖动时更新
 
-    primary.style.width = primaryWidth + 'px';
-    primary.style.maxWidth = 'none';
-    primary.style.minWidth = '0';
-    primary.style.flex = 'none';
+    function applyColumns() {
+      var totalWidth = columns.getBoundingClientRect().width;
+      var minPrimary = totalWidth * 0.3;
+      var minSecondary = 440;
+      var primaryWidth = Math.round((totalWidth - resizerWidth) * splitRatio);
+      primaryWidth = Math.max(minPrimary, Math.min(primaryWidth, totalWidth - minSecondary - resizerWidth));
+      var secondaryWidth = totalWidth - primaryWidth - resizerWidth;
 
-    secondary.style.width = secondaryWidth + 'px';
-    secondary.style.maxWidth = 'none';
-    secondary.style.minWidth = '0';
-    secondary.style.flex = 'none';
+      primary.style.width = primaryWidth + 'px';
+      primary.style.maxWidth = 'none';
+      primary.style.minWidth = '0';
+      primary.style.flex = 'none';
 
+      secondary.style.width = secondaryWidth + 'px';
+      secondary.style.maxWidth = 'none';
+      secondary.style.minWidth = '0';
+      secondary.style.flex = 'none';
+    }
+
+    applyColumns();
     forceVideoResize(primary);
+
+    // window resize 只重算列宽，不调 forceVideoResize，避免循环触发
+    YTX._resizerOnWindowResize = function () {
+      applyColumns();
+    };
+    window.addEventListener('resize', YTX._resizerOnWindowResize);
 
     var isDragging = false;
 
@@ -372,11 +386,11 @@
       if (!isDragging) return;
       var columnsRect = columns.getBoundingClientRect();
       var totalWidth = columnsRect.width;
-      var resizerWidth = 24;
       var primaryWidth = e.clientX - columnsRect.left;
       var minPrimary = totalWidth * 0.3;
       var minSecondary = 440;
       primaryWidth = Math.max(minPrimary, Math.min(primaryWidth, totalWidth - minSecondary - resizerWidth));
+      splitRatio = primaryWidth / (totalWidth - resizerWidth);
 
       primary.style.width = primaryWidth + 'px';
       primary.style.maxWidth = 'none';
@@ -429,6 +443,7 @@
     // 清理 document 级事件监听器
     if (YTX._resizerOnMove) { document.removeEventListener('mousemove', YTX._resizerOnMove); YTX._resizerOnMove = null; }
     if (YTX._resizerOnUp) { document.removeEventListener('mouseup', YTX._resizerOnUp); YTX._resizerOnUp = null; }
+    if (YTX._resizerOnWindowResize) { window.removeEventListener('resize', YTX._resizerOnWindowResize); YTX._resizerOnWindowResize = null; }
 
     var resizer = document.getElementById('ytx-resizer');
     if (resizer) resizer.remove();
