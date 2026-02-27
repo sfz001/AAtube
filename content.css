@@ -203,11 +203,13 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
 #ytx-content-html {
   display: none;
   padding: 0;
+  height: calc(100vh - 300px);
+  overflow-y: auto;
 }
 #ytx-content-html iframe {
   width: 100%;
   border: none;
-  height: calc(100vh - 300px);
+  height: 100%;
 }
 #ytx-content-html::-webkit-scrollbar {
   width: 6px;
