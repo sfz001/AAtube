@@ -48,7 +48,6 @@ YTX.features.summary = {
     try {
       await YTX.ensureTranscript();
 
-      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading"><div class="ytx-spinner"></div><span>正在生成总结...</span></div>';
 
       var settings = await YTX.getSettings();

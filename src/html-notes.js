@@ -43,7 +43,6 @@ YTX.features.html = {
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
       await YTX.ensureTranscript();
 
-      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在生成精美笔记...</span></div>';
 
       var settings = await YTX.getSettings();

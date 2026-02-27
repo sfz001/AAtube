@@ -208,7 +208,6 @@
         contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div></div>';
         await YTX.ensureTranscript();
 
-        btn.innerHTML = YTX.icons.spinner;
         contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在生成思维导图...</span></div></div>';
 
         var settings = await YTX.getSettings();

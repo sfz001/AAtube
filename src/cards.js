@@ -46,7 +46,6 @@ YTX.features.cards = {
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
       await YTX.ensureTranscript();
 
-      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在生成知识卡片...</span></div>';
 
       var settings = await YTX.getSettings();
