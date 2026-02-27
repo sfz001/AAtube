@@ -41,8 +41,9 @@ const PROVIDERS = {
     placeholder: 'sk-...',
     helpUrl: 'https://platform.openai.com/api-keys',
     models: [
-      { value: 'gpt-4o-mini', label: 'GPT-4o mini — 推荐' },
-      { value: 'gpt-4o', label: 'GPT-4o — 最强' },
+      { value: 'gpt-5-mini', label: 'GPT-5 mini — 推荐' },
+      { value: 'gpt-5-nano', label: 'GPT-5 nano — 更快' },
+      { value: 'gpt-5.2', label: 'GPT-5.2 — 最强' },
     ]
   },
   gemini: {
@@ -51,9 +52,9 @@ const PROVIDERS = {
     placeholder: 'AIza...',
     helpUrl: 'https://aistudio.google.com/apikey',
     models: [
-      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — 推荐' },
-      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash — 更快' },
-      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro — 最强' },
+      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash — 推荐' },
+      { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro — 最强' },
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — 稳定' },
     ]
   }
 };

@@ -37,7 +37,8 @@ YTX.getSettings = function () {
     chrome.storage.sync.get(
       ['provider', 'apiKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt'],
       function (data) {
-        var provider = data.provider || 'claude';
+        // 视频模式（无字幕）时自动切换到 Gemini
+        var provider = (YTX.videoMode && data.geminiKey) ? 'gemini' : (data.provider || 'claude');
         var KEY_MAP = { claude: 'apiKey', openai: 'openaiKey', gemini: 'geminiKey' };
         var MODEL_MAP = { claude: 'claudeModel', openai: 'openaiModel', gemini: 'geminiModel' };
         resolve({

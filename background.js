@@ -374,7 +374,7 @@ function startKeepalive() {
 async function handleTranscribeVideo(message) {
   const { videoUrl, activeKey } = message;
   const key = activeKey;
-  const model = 'gemini-2.5-flash';
+  const model = 'gemini-3-flash-preview';
 
   if (!key) return { error: '请先在扩展设置中填入 Gemini API Key' };
 
@@ -473,7 +473,7 @@ async function callProvider(provider, opts) {
   const model = sanitizeModel(provider, opts.model);
 
   // 计算实际使用的模型 ID
-  const DEFAULT_MODEL = { claude: 'claude-sonnet-4-6', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash' };
+  const DEFAULT_MODEL = { claude: 'claude-sonnet-4-6', openai: 'gpt-5-mini', gemini: 'gemini-3-flash-preview' };
   const actualModel = model || DEFAULT_MODEL[provider] || DEFAULT_MODEL.claude;
 
   // 通知 content.js 当前使用的模型
