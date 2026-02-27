@@ -1,15 +1,23 @@
-const DEFAULT_PROMPT = `请对以下 YouTube 视频字幕内容进行总结，使用中文回答。要求：
-1. 先给出简洁的整体摘要（3-5句话）
-2. 然后按内容分段，每段标注对应的时间戳 [MM:SS]，给出该段的要点
-3. 总结要简洁有条理，突出关键信息
+const DEFAULT_PROMPT = `请对以下 YouTube 视频字幕内容进行总结。
 
-格式要求：
-## 摘要
-（整体概述）
+## 输出格式：
 
-## 详细内容
-[00:00] **段落标题** - 要点描述
-[02:30] **段落标题** - 要点描述
+### 摘要
+3-5句话概述视频主要内容
+
+### 关键要点
+提取 3-5 个最重要的收获，每个一句话
+
+### 详细内容
+按内容分段，标注时间戳 [MM:SS]：
+[00:00] 段落标题 - 要点描述
+[02:30] 段落标题 - 要点描述
+
+## 要求：
+- 语言简洁，避免废话
+- 关键要点不要跟摘要重复，要有信息增量
+- 时间戳准确对应内容变化点
+- 时间戳只用单个起始时间点格式 [0:00]，不要用时间范围 [0:00-0:32]
 
 ---
 字幕内容：
@@ -53,17 +61,27 @@ const PROVIDERS = {
 const $ = (sel) => document.querySelector(sel);
 
 let currentProvider = 'claude';
-// Cache keys in memory so switching tabs doesn't lose unsaved input
+// Cache keys and model selection per provider so switching tabs doesn't lose unsaved input
 let keyCache = { apiKey: '', openaiKey: '', geminiKey: '' };
+let modelCache = { claude: '', openai: '', gemini: '' };
 
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.sync.get(['provider', 'apiKey', 'openaiKey', 'geminiKey', 'model', 'prompt'], (data) => {
+  chrome.storage.sync.get(['provider', 'apiKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt'], (data) => {
     keyCache.apiKey = data.apiKey || '';
     keyCache.openaiKey = data.openaiKey || '';
     keyCache.geminiKey = data.geminiKey || '';
 
+    // 加载各 provider 独立的 model，向下兼容旧的全局 model 字段
+    modelCache.claude = data.claudeModel || '';
+    modelCache.openai = data.openaiModel || '';
+    modelCache.gemini = data.geminiModel || '';
+
     currentProvider = data.provider || 'claude';
-    switchProvider(currentProvider, data.model);
+    // 向下兼容：旧版只存了全局 model，作为当前 provider 的 fallback
+    if (!modelCache[currentProvider] && data.model) {
+      modelCache[currentProvider] = data.model;
+    }
+    switchProvider(currentProvider);
 
     $('#prompt').value = data.prompt || DEFAULT_PROMPT;
   });
@@ -71,9 +89,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Provider tab clicks
   document.querySelectorAll('.provider-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      // Save current key input to cache before switching
+      // Save current key and model to cache before switching
       const cfg = PROVIDERS[currentProvider];
       keyCache[cfg.keyField] = $('#currentKey').value.trim();
+      modelCache[currentProvider] = $('#model').value;
 
       switchProvider(tab.dataset.provider);
     });
@@ -107,14 +126,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update cache
     keyCache[cfg.keyField] = key;
+    modelCache[currentProvider] = model;
 
-    // Save all keys + current provider + model
+    // Save all keys + per-provider models, remove legacy global 'model' field
+    chrome.storage.sync.remove('model');
     chrome.storage.sync.set({
       provider: currentProvider,
       apiKey: keyCache.apiKey,
       openaiKey: keyCache.openaiKey,
       geminiKey: keyCache.geminiKey,
-      model,
+      claudeModel: modelCache.claude,
+      openaiModel: modelCache.openai,
+      geminiModel: modelCache.gemini,
       prompt,
     }, () => {
       showStatus('设置已保存 ✓', 'success');
@@ -122,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-function switchProvider(id, savedModel) {
+function switchProvider(id) {
   currentProvider = id;
   const cfg = PROVIDERS[id];
 
@@ -148,9 +171,9 @@ function switchProvider(id, savedModel) {
     select.appendChild(opt);
   });
 
-  // Restore saved model if it belongs to this provider
-  if (savedModel && cfg.models.some(m => m.value === savedModel)) {
-    select.value = savedModel;
+  // Restore this provider's cached model selection
+  if (modelCache[id] && cfg.models.some(m => m.value === modelCache[id])) {
+    select.value = modelCache[id];
   }
 }
 

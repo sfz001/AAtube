@@ -25,6 +25,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ started: true });
     return true;
   }
+  if (message.type === 'GENERATE_VOCAB') {
+    handleSummarize(message, sender.tab.id, 'VOCAB');
+    sendResponse({ started: true });
+    return true;
+  }
   if (message.type === 'CHAT_ASK') {
     handleChat(message, sender.tab.id);
     sendResponse({ started: true });
@@ -299,46 +304,33 @@ function safeSend(tabId, msg) {
   } catch {}
 }
 
-// ── 根据 provider 获取对应 API Key ─────────────────────
-function getActiveKey(message) {
-  const provider = message.provider || 'claude';
-  if (provider === 'openai') return message.openaiKey;
-  if (provider === 'gemini') return message.geminiKey;
-  return message.apiKey; // claude (向下兼容)
-}
-
 // ── 总结/生成路由 ────────────────────────────────────────
 async function handleSummarize(message, tabId, mode = 'SUMMARY') {
-  const { transcript, prompt, model } = message;
+  const { transcript, prompt, model, activeKey } = message;
   const provider = message.provider || 'claude';
-  const activeKey = getActiveKey(message);
+  // 向下兼容：旧版 content.js 可能还传 apiKey
+  const key = activeKey || message.apiKey;
   const PREFIX = mode;
 
-  if (!activeKey) {
+  if (!key) {
     safeSend(tabId, { type: `${PREFIX}_ERROR`, error: '请先在扩展设置中填入 API Key' });
     return;
   }
 
   const fullPrompt = prompt.replace('{transcript}', transcript);
-  const opts = { key: activeKey, model, userPrompt: fullPrompt, maxTokens: 8096, tabId, PREFIX };
+  const messages = [{ role: 'user', content: fullPrompt }];
 
-  if (provider === 'openai') {
-    await callOpenAI(opts);
-  } else if (provider === 'gemini') {
-    await callGemini(opts);
-  } else {
-    await callClaude(opts);
-  }
+  await callProvider(provider, { key, model, messages, maxTokens: 8096, tabId, PREFIX });
 }
 
 // ── 多轮对话路由 ─────────────────────────────────────────
 async function handleChat(message, tabId) {
-  const { transcript, messages, model } = message;
+  const { transcript, messages, model, activeKey } = message;
   const provider = message.provider || 'claude';
-  const activeKey = getActiveKey(message);
+  const key = activeKey || message.apiKey;
   const PREFIX = 'CHAT';
 
-  if (!activeKey) {
+  if (!key) {
     safeSend(tabId, { type: 'CHAT_ERROR', error: '请先在扩展设置中填入 API Key' });
     return;
   }
@@ -352,38 +344,85 @@ async function handleChat(message, tabId) {
 字幕内容：
 ${transcript}`;
 
-  const opts = { key: activeKey, model, systemPrompt, messages, maxTokens: 4096, tabId, PREFIX };
-
-  if (provider === 'openai') {
-    await callOpenAIChat(opts);
-  } else if (provider === 'gemini') {
-    await callGeminiChat(opts);
-  } else {
-    await callClaudeChat(opts);
-  }
+  await callProvider(provider, { key, model, systemPrompt, messages, maxTokens: 4096, tabId, PREFIX });
 }
 
-// ══════════════════════════════════════════════════════════
-// Claude API
-// ══════════════════════════════════════════════════════════
+// ── 校验 model 是否属于当前 provider，不匹配则清空让默认值生效 ──
+const MODEL_PREFIX = { claude: 'claude-', openai: 'gpt-', gemini: 'gemini-' };
+function sanitizeModel(provider, model) {
+  if (!model) return '';
+  const prefix = MODEL_PREFIX[provider];
+  return (prefix && model.startsWith(prefix)) ? model : '';
+}
 
-async function callClaude({ key, model, userPrompt, maxTokens, tabId, PREFIX }) {
+// ── 统一调用入口 ─────────────────────────────────────────
+async function callProvider(provider, opts) {
+  const { key, systemPrompt, messages, maxTokens, tabId, PREFIX } = opts;
+  const model = sanitizeModel(provider, opts.model);
+
+  // 计算实际使用的模型 ID
+  const DEFAULT_MODEL = { claude: 'claude-sonnet-4-6', openai: 'gpt-5-mini', gemini: 'gemini-3-flash-preview' };
+  const actualModel = model || DEFAULT_MODEL[provider] || DEFAULT_MODEL.claude;
+
+  // 通知 content.js 当前使用的模型
+  safeSend(tabId, { type: `${PREFIX}_MODEL`, provider, model: actualModel });
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: model || 'claude-sonnet-4-6',
+    let response;
+
+    if (provider === 'openai') {
+      const apiMessages = systemPrompt
+        ? [{ role: 'system', content: systemPrompt }, ...messages]
+        : messages;
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: actualModel,
+          messages: apiMessages,
+          max_completion_tokens: maxTokens,
+          stream: true,
+        }),
+      });
+    } else if (provider === 'gemini') {
+      const modelId = actualModel;
+      const contents = messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+      const body = { contents, generationConfig: { maxOutputTokens: maxTokens } };
+      if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse&key=${key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
+    } else {
+      // Claude (默认)
+      const body = {
+        model: actualModel,
         max_tokens: maxTokens,
         stream: true,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
+        messages,
+      };
+      if (systemPrompt) body.system = systemPrompt;
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify(body),
+      });
+    }
 
     if (!response.ok) {
       const err = await response.text();
@@ -391,145 +430,14 @@ async function callClaude({ key, model, userPrompt, maxTokens, tabId, PREFIX }) 
       return;
     }
 
-    await readClaudeStream(response, tabId, PREFIX);
+    await readSSEStream(response, tabId, PREFIX, provider);
   } catch (err) {
     safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
   }
 }
 
-async function callClaudeChat({ key, model, systemPrompt, messages, maxTokens, tabId, PREFIX }) {
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: model || 'claude-sonnet-4-6',
-        max_tokens: maxTokens,
-        stream: true,
-        system: systemPrompt,
-        messages: messages,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
-      return;
-    }
-
-    await readClaudeStream(response, tabId, PREFIX);
-  } catch (err) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
-  }
-}
-
-async function readClaudeStream(response, tabId, PREFIX) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let doneSent = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6);
-      if (data === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-          safeSend(tabId, { type: `${PREFIX}_CHUNK`, text: parsed.delta.text });
-        }
-        if (parsed.type === 'message_stop' && !doneSent) {
-          safeSend(tabId, { type: `${PREFIX}_DONE` });
-          doneSent = true;
-        }
-      } catch {}
-    }
-  }
-
-  if (!doneSent) {
-    safeSend(tabId, { type: `${PREFIX}_DONE` });
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-// OpenAI API
-// ══════════════════════════════════════════════════════════
-
-async function callOpenAI({ key, model, userPrompt, maxTokens, tabId, PREFIX }) {
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: model || 'gpt-5-mini',
-        messages: [{ role: 'user', content: userPrompt }],
-        max_completion_tokens: maxTokens,
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
-      return;
-    }
-
-    await readOpenAIStream(response, tabId, PREFIX);
-  } catch (err) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
-  }
-}
-
-async function callOpenAIChat({ key, model, systemPrompt, messages, maxTokens, tabId, PREFIX }) {
-  try {
-    const apiMessages = [
-      { role: 'system', content: systemPrompt },
-      ...messages,
-    ];
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: model || 'gpt-5-mini',
-        messages: apiMessages,
-        max_completion_tokens: maxTokens,
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
-      return;
-    }
-
-    await readOpenAIStream(response, tabId, PREFIX);
-  } catch (err) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
-  }
-}
-
-async function readOpenAIStream(response, tabId, PREFIX) {
+// ── 统一 SSE 流式读取 ───────────────────────────────────
+async function readSSEStream(response, tabId, PREFIX, provider) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -553,111 +461,29 @@ async function readOpenAIStream(response, tabId, PREFIX) {
         }
         continue;
       }
-      try {
-        const parsed = JSON.parse(data);
-        const text = parsed.choices?.[0]?.delta?.content;
-        if (text) {
-          safeSend(tabId, { type: `${PREFIX}_CHUNK`, text });
-        }
-        if (parsed.choices?.[0]?.finish_reason === 'stop' && !doneSent) {
-          safeSend(tabId, { type: `${PREFIX}_DONE` });
-          doneSent = true;
-        }
-      } catch {}
-    }
-  }
-
-  if (!doneSent) {
-    safeSend(tabId, { type: `${PREFIX}_DONE` });
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-// Gemini API
-// ══════════════════════════════════════════════════════════
-
-async function callGemini({ key, model, userPrompt, maxTokens, tabId, PREFIX }) {
-  const modelId = model || 'gemini-3-flash-preview';
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse&key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { maxOutputTokens: maxTokens },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
-      return;
-    }
-
-    await readGeminiStream(response, tabId, PREFIX);
-  } catch (err) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
-  }
-}
-
-async function callGeminiChat({ key, model, systemPrompt, messages, maxTokens, tabId, PREFIX }) {
-  const modelId = model || 'gemini-3-flash-preview';
-  try {
-    // Convert chat messages to Gemini format
-    const contents = messages.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:streamGenerateContent?alt=sse&key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents,
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { maxOutputTokens: maxTokens },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
-      return;
-    }
-
-    await readGeminiStream(response, tabId, PREFIX);
-  } catch (err) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
-  }
-}
-
-async function readGeminiStream(response, tabId, PREFIX) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let doneSent = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6).trim();
       if (!data) continue;
+
       try {
         const parsed = JSON.parse(data);
-        const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+        let text;
+
+        if (provider === 'openai') {
+          text = parsed.choices?.[0]?.delta?.content;
+          if (parsed.choices?.[0]?.finish_reason === 'stop' && !doneSent) {
+            safeSend(tabId, { type: `${PREFIX}_DONE` });
+            doneSent = true;
+          }
+        } else if (provider === 'gemini') {
+          text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+        } else {
+          // Claude
+          if (parsed.type === 'content_block_delta') text = parsed.delta?.text;
+          if (parsed.type === 'message_stop' && !doneSent) {
+            safeSend(tabId, { type: `${PREFIX}_DONE` });
+            doneSent = true;
+          }
+        }
+
         if (text) {
           safeSend(tabId, { type: `${PREFIX}_CHUNK`, text });
         }

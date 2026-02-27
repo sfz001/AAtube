@@ -16,7 +16,18 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
+      "js": [
+        "src/core.js",
+        "src/prompts.js",
+        "src/markdown.js",
+        "src/summary.js",
+        "src/html-notes.js",
+        "src/chat.js",
+        "src/cards.js",
+        "src/mindmap.js",
+        "src/vocab.js",
+        "src/panel.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
