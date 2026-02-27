@@ -1,7 +1,7 @@
 // src/chat.js — 互动问答
 
 YTX.features.chat = {
-  tab: { key: 'chat', label: '问答' },
+  tab: { key: 'chat', label: '问问AI', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' },
   prefix: 'CHAT',
   contentId: 'ytx-content-chat',
   actionsId: 'ytx-actions-chat',
@@ -19,7 +19,7 @@ YTX.features.chat = {
   },
 
   actionsHtml: function () {
-    return '<button id="ytx-clear-chat" class="ytx-btn ytx-btn-secondary">清空对话</button>';
+    return '<button id="ytx-clear-chat" class="ytx-btn ytx-btn-icon ytx-btn-secondary" title="清空对话">' + YTX.icons.trash + '</button>';
   },
 
   contentHtml: function () {

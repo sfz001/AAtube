@@ -274,6 +274,15 @@ YTX.Export = {
     return blocks;
   },
 
+  // ── 文本 → Notion code block（自动分片，每片 ≤ 2000 字符）──
+  makeCodeBlock: function (text, language) {
+    var richText = [];
+    for (var i = 0; i < text.length; i += 2000) {
+      richText.push({ type: 'text', text: { content: text.slice(i, i + 2000) } });
+    }
+    return { type: 'code', code: { rich_text: richText, language: language || 'plain text' } };
+  },
+
   // ── 发送到 Notion ─────────────────────────────────────
   sendToNotion: function (title, blocks, callback) {
     YTX.Export.getNotionSettings().then(function (settings) {
@@ -285,12 +294,23 @@ YTX.Export = {
         callback({ error: '请先在扩展设置中配置 Notion 父级页面' });
         return;
       }
+      // 在最前面插入视频链接
+      var videoUrl = YTX.getVideoUrl();
+      var linkBlock = {
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            { type: 'text', text: { content: '视频链接：' } },
+            { type: 'text', text: { content: videoUrl, link: { url: videoUrl } } }
+          ]
+        }
+      };
       YTX.sendToBg({
         type: 'EXPORT_NOTION',
         token: settings.token,
         pageId: settings.pageId,
         title: title,
-        blocks: blocks
+        blocks: [linkBlock].concat(blocks)
       }).then(function (resp) {
         callback(resp);
       }).catch(function (err) {
@@ -308,6 +328,58 @@ YTX.Export = {
       btn.textContent = original;
       btn.disabled = false;
     }, ms || 1500);
+  },
+
+  // ── GitHub Gist ────────────────────────────────────────
+
+  getGithubToken: function () {
+    return new Promise(function (resolve) {
+      chrome.storage.sync.get(['githubToken'], function (data) {
+        resolve(data.githubToken || '');
+      });
+    });
+  },
+
+  uploadGist: function (filename, content, description) {
+    return YTX.Export.getGithubToken().then(function (token) {
+      if (!token) return null;
+      return YTX.sendToBg({
+        type: 'UPLOAD_GIST',
+        token: token,
+        filename: filename,
+        content: content,
+        description: description || 'AATube export'
+      }).then(function (resp) {
+        if (resp.error) {
+          console.warn('[AATube] Gist 上传失败:', resp.error);
+          return null;
+        }
+        return resp;
+      }).catch(function (err) {
+        console.warn('[AATube] Gist 上传异常:', err);
+        return null;
+      });
+    });
+  },
+
+  sendToNotionWithGist: function (title, blocks, filename, content, fileLabel, callback) {
+    YTX.Export.uploadGist(filename, content, 'AATube: ' + title).then(function (gist) {
+      if (gist && gist.rawUrl) {
+        // gist.githubusercontent.com 强制 text/plain，替换为 gist.githack.com 以正确 Content-Type 渲染
+        var viewUrl = gist.rawUrl.replace('gist.githubusercontent.com', 'gist.githack.com');
+        var gistBlock = {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              { type: 'text', text: { content: fileLabel + '：' } },
+              { type: 'text', text: { content: viewUrl, link: { url: viewUrl } } }
+            ]
+          }
+        };
+        blocks = [gistBlock].concat(blocks);
+      }
+      YTX.Export.sendToNotion(title, blocks, callback);
+    });
   },
 
   // ── 飞书预留 ─────────────────────────────────────────

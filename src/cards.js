@@ -1,7 +1,7 @@
 // src/cards.js — 知识卡片
 
 YTX.features.cards = {
-  tab: { key: 'cards', label: '卡片' },
+  tab: { key: 'cards', label: '卡片', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>' },
   prefix: 'CARDS',
   contentId: 'ytx-content-cards',
   actionsId: 'ytx-actions-cards',
@@ -19,7 +19,7 @@ YTX.features.cards = {
   },
 
   actionsHtml: function () {
-    return '<button id="ytx-generate-cards" class="ytx-btn ytx-btn-primary">生成卡片</button>';
+    return '<button id="ytx-generate-cards" class="ytx-btn ytx-btn-icon ytx-btn-primary" title="生成卡片">' + YTX.icons.play + '</button>';
   },
 
   contentHtml: function () {
@@ -42,11 +42,11 @@ YTX.features.cards = {
     btn.disabled = true;
 
     try {
-      btn.textContent = '获取字幕中...';
+      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
       await YTX.ensureTranscript();
 
-      btn.textContent = '生成中...';
+      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在生成知识卡片...</span></div>';
 
       var settings = await YTX.getSettings();
@@ -62,7 +62,7 @@ YTX.features.cards = {
     } catch (err) {
       contentEl.innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + err.message + '</div>';
       btn.disabled = false;
-      btn.textContent = '生成卡片';
+      YTX.btnPrimary(btn);
       this.isGenerating = false;
     }
   },
@@ -79,10 +79,10 @@ YTX.features.cards = {
       }
       this.render();
     } catch (err) {
-      YTX.panel.querySelector('#ytx-content-cards').innerHTML = '<div class="ytx-error" style="margin:14px 16px">卡片解析失败: ' + err.message + '<br>可尝试点击「重新生成」</div>';
+      YTX.parseError(YTX.panel.querySelector('#ytx-content-cards'), '卡片', err);
     }
     YTX.panel.querySelector('#ytx-generate-cards').disabled = false;
-    YTX.panel.querySelector('#ytx-generate-cards').textContent = '重新生成';
+    YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-cards'));
     this.isGenerating = false;
     if (this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'cards', { data: this.data });
   },
@@ -90,7 +90,7 @@ YTX.features.cards = {
   onError: function (error) {
     YTX.panel.querySelector('#ytx-content-cards').innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + error + '</div>';
     YTX.panel.querySelector('#ytx-generate-cards').disabled = false;
-    YTX.panel.querySelector('#ytx-generate-cards').textContent = '生成卡片';
+    YTX.btnPrimary(YTX.panel.querySelector('#ytx-generate-cards'));
     this.isGenerating = false;
   },
 

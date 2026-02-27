@@ -45,24 +45,35 @@
     YTX.cache.load(videoId).then(function (record) {
       if (!record || !YTX.panel) return;
 
+      // 字幕
+      if (record.transcript && record.transcript.full) {
+        YTX.transcriptData = {
+          segments: record.transcript.segments || null,
+          full: record.transcript.full,
+          truncated: record.transcript.truncated || false,
+        };
+        if (record.transcript.videoMode) {
+          YTX.videoMode = true;
+          YTX.showVideoModeBanner();
+        }
+        YTX.renderTranscript();
+      }
+
       // 总结
       if (record.summary && record.summary.text) {
         var s = YTX.features.summary;
         s.text = record.summary.text;
         var el = YTX.panel.querySelector('#ytx-content');
         if (el) el.innerHTML = YTX.renderMarkdown(s.text);
-        YTX.panel.querySelector('#ytx-summarize').textContent = '重新总结';
+        YTX.btnRefresh(YTX.panel.querySelector('#ytx-summarize'));
       }
 
       // 笔记
       if (record.html && record.html.text) {
         var h = YTX.features.html;
         h.text = record.html.text;
-        h.renderToIframe(h.text);
-        YTX.panel.querySelector('#ytx-generate-html').textContent = '重新生成';
-        YTX.panel.querySelector('#ytx-open-html').style.display = 'inline-block';
-        YTX.panel.querySelector('#ytx-dl-html').style.display = 'inline-block';
-        YTX.panel.querySelector('#ytx-export-notion-html').style.display = 'inline-block';
+        h.renderContent();
+        YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-html'));
       }
 
       // 卡片
@@ -70,7 +81,7 @@
         var c = YTX.features.cards;
         c.data = record.cards.data;
         c.render();
-        YTX.panel.querySelector('#ytx-generate-cards').textContent = '重新生成';
+        YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-cards'));
       }
 
       // 导图
@@ -78,10 +89,7 @@
         var m = YTX.features.mindmap;
         m.data = record.mindmap.data;
         m.render();
-        YTX.panel.querySelector('#ytx-generate-mindmap').textContent = '重新生成';
-        YTX.panel.querySelector('#ytx-open-mindmap').style.display = 'inline-block';
-        YTX.panel.querySelector('#ytx-export-mindmap').style.display = 'inline-block';
-        YTX.panel.querySelector('#ytx-export-notion-mindmap').style.display = 'inline-block';
+        YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-mindmap'));
       }
 
       // 词汇
@@ -89,9 +97,7 @@
         var v = YTX.features.vocab;
         v.data = record.vocab.data;
         v.render();
-        YTX.panel.querySelector('#ytx-generate-vocab').textContent = '重新提取';
-        YTX.panel.querySelector('#ytx-copy-vocab').style.display = 'inline-block';
-        YTX.panel.querySelector('#ytx-refresh-vocab').style.display = 'inline-block';
+        YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-vocab'));
       }
     });
   }
@@ -118,14 +124,14 @@
     panel.id = 'ytx-panel';
     YTX.panel = panel;
 
-    // 动态拼接 tabs
+    // 动态拼接 tabs（图标 + tooltip）
     var tabsHtml = YTX.featureOrder.map(function (key) {
       var f = YTX.features[key];
       var active = key === 'summary' ? ' active' : '';
-      return '<button class="ytx-tab' + active + '" data-tab="' + key + '">' + f.tab.label + '</button>';
+      return '<button class="ytx-tab' + active + '" data-tab="' + key + '" title="' + f.tab.label + '">' + (f.tab.icon || f.tab.label) + '</button>';
     }).join('');
 
-    // 动态拼接 actions
+    // 动态拼接 actions（嵌入 tabs 行右侧）
     var actionsHtml = YTX.featureOrder.map(function (key) {
       var f = YTX.features[key];
       var display = key === 'summary' ? 'flex' : 'none';
@@ -140,11 +146,10 @@
     }).join('');
 
     panel.innerHTML =
-      '<div id="ytx-header">' +
-        '<span class="ytx-title">AATube</span>' +
+      '<div id="ytx-tabs">' +
+        tabsHtml +
         '<div id="ytx-actions">' + actionsHtml + '</div>' +
       '</div>' +
-      '<div id="ytx-tabs">' + tabsHtml + '</div>' +
       '<div id="ytx-video-mode-banner" style="display:none">' +
         '<span>已通过 Gemini 视频模式获取内容</span>' +
         '<button id="ytx-video-mode-close" title="关闭提示">\u00D7</button>' +
@@ -198,6 +203,11 @@
       });
     });
 
+    // 阻止面板内滚轮事件冒泡到页面
+    panel.addEventListener('wheel', function (e) {
+      e.stopPropagation();
+    });
+
     // 面板级时间戳点击委托
     setupTimestampClickHandler(panel);
 
@@ -225,13 +235,22 @@
       YTX.panel.querySelector('#' + f.actionsId).style.display = isActive ? 'flex' : 'none';
     });
 
-    // 字幕区只在总结标签下显示
-    var transcriptSection = YTX.panel.querySelector('#ytx-transcript-section');
-    if (transcriptSection) transcriptSection.style.display = tab === 'summary' ? 'block' : 'none';
+    // 字幕区在所有标签下都显示
+
 
     if (tab === 'chat') {
       var input = YTX.panel.querySelector('#ytx-chat-input');
       setTimeout(function () { input.focus(); }, 100);
+    }
+
+    // 导图首次可见时重新 auto-fit
+    if (tab === 'mindmap') {
+      var m = YTX.features.mindmap;
+      if (m.data && !m._fitted) {
+        m.transform = { x: 0, y: 0, scale: 1 };
+        m.render();
+        m._fitted = true;
+      }
     }
   }
 
@@ -272,10 +291,12 @@
   };
 
   function toggleTranscript() {
+    var section = YTX.panel.querySelector('#ytx-transcript-section');
     var body = YTX.panel.querySelector('#ytx-transcript-body');
     var arrow = YTX.panel.querySelector('#ytx-transcript-toggle .arrow');
     body.classList.toggle('open');
     arrow.classList.toggle('open');
+    section.classList.toggle('expanded');
   }
 
   // ── 时间戳跳转（面板级事件委托）───────────────────────
@@ -311,6 +332,24 @@
     columns.style.display = 'flex';
     columns.style.flexWrap = 'nowrap';
 
+    // 默认分栏：视频占 3/5，AATube 占 2/5
+    var totalWidth = columns.getBoundingClientRect().width;
+    var resizerWidth = 24;
+    var primaryWidth = Math.round((totalWidth - resizerWidth) * 3 / 5);
+    var secondaryWidth = totalWidth - primaryWidth - resizerWidth;
+
+    primary.style.width = primaryWidth + 'px';
+    primary.style.maxWidth = 'none';
+    primary.style.minWidth = '0';
+    primary.style.flex = 'none';
+
+    secondary.style.width = secondaryWidth + 'px';
+    secondary.style.maxWidth = 'none';
+    secondary.style.minWidth = '0';
+    secondary.style.flex = 'none';
+
+    forceVideoResize(primary);
+
     var isDragging = false;
 
     resizer.addEventListener('mousedown', function (e) {
@@ -336,7 +375,7 @@
       var resizerWidth = 24;
       var primaryWidth = e.clientX - columnsRect.left;
       var minPrimary = totalWidth * 0.3;
-      var minSecondary = 300;
+      var minSecondary = 440;
       primaryWidth = Math.max(minPrimary, Math.min(primaryWidth, totalWidth - minSecondary - resizerWidth));
 
       primary.style.width = primaryWidth + 'px';

@@ -1,5 +1,10 @@
 // background.js — Service Worker: 字幕获取 + 多模型 API 流式调用
 
+// 点击扩展图标 → 打开设置页
+chrome.action.onClicked.addListener(() => {
+  chrome.runtime.openOptionsPage();
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'FETCH_TRANSCRIPT') {
     handleFetchTranscript(message.videoId, sender.tab.id).then(sendResponse);
@@ -41,6 +46,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'EXPORT_NOTION') {
     handleExportNotion(message).then(sendResponse);
+    return true;
+  }
+  if (message.type === 'UPLOAD_GIST') {
+    handleUploadGist(message).then(sendResponse);
     return true;
   }
   return false;
@@ -327,9 +336,10 @@ async function handleSummarize(message, tabId, mode = 'SUMMARY') {
   }
 
   const fullPrompt = prompt.replace('{transcript}', transcript);
+  const systemPrompt = '你是一个专业的视频内容分析助手。你必须始终使用简体中文回答，无论输入的字幕是什么语言。严禁使用繁体中文、阿拉伯语、日语、韩语或任何其他非简体中文语言。';
   const messages = [{ role: 'user', content: fullPrompt }];
 
-  await callProvider(provider, { key, model, messages, maxTokens: 8096, tabId, PREFIX });
+  await callProvider(provider, { key, model, systemPrompt, messages, maxTokens: 8096, tabId, PREFIX });
 }
 
 // ── 多轮对话路由 ─────────────────────────────────────────
@@ -665,5 +675,36 @@ async function handleExportNotion(message) {
     return { success: true, url: page.url };
   } catch (err) {
     return { error: `导出失败: ${err.message}` };
+  }
+}
+
+// ── GitHub Gist 上传 ──────────────────────────────────
+async function handleUploadGist(message) {
+  const { token, filename, content, description } = message;
+  try {
+    const resp = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+      },
+      body: JSON.stringify({
+        description: description || 'AATube export',
+        public: false,
+        files: { [filename]: { content } },
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      return { error: `GitHub API 错误 (${resp.status}): ${err}` };
+    }
+
+    const gist = await resp.json();
+    const rawUrl = gist.files[filename]?.raw_url || '';
+    return { rawUrl, gistUrl: gist.html_url };
+  } catch (err) {
+    return { error: `Gist 上传失败: ${err.message}` };
   }
 }

@@ -1,7 +1,7 @@
 // src/summary.js — 总结功能
 
 YTX.features.summary = {
-  tab: { key: 'summary', label: '总结' },
+  tab: { key: 'summary', label: '总结', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>' },
   prefix: 'SUMMARY',
   contentId: 'ytx-content',
   actionsId: 'ytx-actions-summary',
@@ -19,8 +19,8 @@ YTX.features.summary = {
   },
 
   actionsHtml: function () {
-    return '<button id="ytx-generate-all" class="ytx-btn ytx-btn-primary">全部生成</button>' +
-           '<button id="ytx-summarize" class="ytx-btn ytx-btn-secondary">总结视频</button>';
+    return '<button id="ytx-generate-all" class="ytx-btn ytx-btn-icon ytx-btn-primary" title="一键生成">' + YTX.icons.zap + '</button>' +
+           '<button id="ytx-summarize" class="ytx-btn ytx-btn-icon ytx-btn-secondary" title="总结视频">' + YTX.icons.play + '</button>';
   },
 
   contentHtml: function () {
@@ -42,13 +42,13 @@ YTX.features.summary = {
     var contentEl = YTX.panel.querySelector('#ytx-content');
 
     btn.disabled = true;
-    btn.textContent = '获取字幕中...';
+    btn.innerHTML = YTX.icons.spinner;
     contentEl.innerHTML = '<div class="ytx-loading"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
 
     try {
       await YTX.ensureTranscript();
 
-      btn.textContent = '总结中...';
+      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading"><div class="ytx-spinner"></div><span>正在生成总结...</span></div>';
 
       var settings = await YTX.getSettings();
@@ -65,7 +65,7 @@ YTX.features.summary = {
     } catch (err) {
       contentEl.innerHTML = '<div class="ytx-error">' + err.message + '</div>';
       btn.disabled = false;
-      btn.textContent = '总结视频';
+      YTX.btnPrimary(btn);
       this.isGenerating = false;
     }
   },
@@ -98,7 +98,7 @@ YTX.features.summary = {
     contentEl.scrollTop = scrollTop;
 
     YTX.panel.querySelector('#ytx-summarize').disabled = false;
-    YTX.panel.querySelector('#ytx-summarize').textContent = '重新总结';
+    YTX.btnRefresh(YTX.panel.querySelector('#ytx-summarize'));
     this.isGenerating = false;
     YTX.cache.save(YTX.currentVideoId, 'summary', { text: this.text });
   },
@@ -106,7 +106,7 @@ YTX.features.summary = {
   onError: function (error) {
     YTX.panel.querySelector('#ytx-content').innerHTML = '<div class="ytx-error">' + error + '</div>';
     YTX.panel.querySelector('#ytx-summarize').disabled = false;
-    YTX.panel.querySelector('#ytx-summarize').textContent = '总结视频';
+    YTX.btnPrimary(YTX.panel.querySelector('#ytx-summarize'));
     this.isGenerating = false;
   },
 

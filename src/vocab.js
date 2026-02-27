@@ -1,7 +1,7 @@
 // src/vocab.js — 学英语/词汇
 
 YTX.features.vocab = {
-  tab: { key: 'vocab', label: '学英语' },
+  tab: { key: 'vocab', label: '学单词', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>' },
   prefix: 'VOCAB',
   contentId: 'ytx-content-vocab',
   actionsId: 'ytx-actions-vocab',
@@ -19,9 +19,7 @@ YTX.features.vocab = {
   },
 
   actionsHtml: function () {
-    return '<button id="ytx-generate-vocab" class="ytx-btn ytx-btn-primary">提取词汇</button>' +
-           '<button id="ytx-refresh-vocab" class="ytx-btn ytx-btn-secondary" style="display:none">换一批</button>' +
-           '<button id="ytx-copy-vocab" class="ytx-btn ytx-btn-secondary" style="display:none">复制</button>';
+    return '<button id="ytx-generate-vocab" class="ytx-btn ytx-btn-icon ytx-btn-primary" title="提取词汇">' + YTX.icons.play + '</button>';
   },
 
   contentHtml: function () {
@@ -31,8 +29,6 @@ YTX.features.vocab = {
   bindEvents: function (panel) {
     var self = this;
     panel.querySelector('#ytx-generate-vocab').addEventListener('click', function () { self.start(); });
-    panel.querySelector('#ytx-refresh-vocab').addEventListener('click', function () { self.refresh(); });
-    panel.querySelector('#ytx-copy-vocab').addEventListener('click', function () { self.copy(); });
   },
 
   start: async function () {
@@ -43,16 +39,14 @@ YTX.features.vocab = {
 
     var btn = YTX.panel.querySelector('#ytx-generate-vocab');
     var contentEl = YTX.panel.querySelector('#ytx-content-vocab');
-    var copyBtn = YTX.panel.querySelector('#ytx-copy-vocab');
     btn.disabled = true;
-    copyBtn.style.display = 'none';
 
     try {
-      btn.textContent = '获取字幕中...';
+      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
       await YTX.ensureTranscript();
 
-      btn.textContent = '提取中...';
+      btn.innerHTML = YTX.icons.spinner;
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在提取词汇短语...</span></div>';
 
       var settings = await YTX.getSettings();
@@ -68,7 +62,7 @@ YTX.features.vocab = {
     } catch (err) {
       contentEl.innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + err.message + '</div>';
       btn.disabled = false;
-      btn.textContent = '提取词汇';
+      YTX.btnPrimary(btn);
       this.isGenerating = false;
     }
   },
@@ -84,13 +78,11 @@ YTX.features.vocab = {
         throw new Error('AI 返回的内容不包含有效 JSON，请重新生成');
       }
       this.render();
-      YTX.panel.querySelector('#ytx-copy-vocab').style.display = 'inline-block';
-      YTX.panel.querySelector('#ytx-refresh-vocab').style.display = 'inline-block';
     } catch (err) {
-      YTX.panel.querySelector('#ytx-content-vocab').innerHTML = '<div class="ytx-error" style="margin:14px 16px">词汇解析失败: ' + err.message + '<br>可尝试点击「重新提取」</div>';
+      YTX.parseError(YTX.panel.querySelector('#ytx-content-vocab'), '词汇', err);
     }
     YTX.panel.querySelector('#ytx-generate-vocab').disabled = false;
-    YTX.panel.querySelector('#ytx-generate-vocab').textContent = '重新提取';
+    YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-vocab'));
     this.isGenerating = false;
     if (this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'vocab', { data: this.data });
   },
@@ -98,16 +90,22 @@ YTX.features.vocab = {
   onError: function (error) {
     YTX.panel.querySelector('#ytx-content-vocab').innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + error + '</div>';
     YTX.panel.querySelector('#ytx-generate-vocab').disabled = false;
-    YTX.panel.querySelector('#ytx-generate-vocab').textContent = '提取词汇';
+    YTX.btnPrimary(YTX.panel.querySelector('#ytx-generate-vocab'));
     this.isGenerating = false;
   },
 
   render: function () {
     if (!YTX.panel || this.data.length === 0) return;
+    var self = this;
     var contentEl = YTX.panel.querySelector('#ytx-content-vocab');
 
     contentEl.innerHTML =
-      '<div class="ytx-vocab-counter">共 ' + this.data.length + ' 个词汇/短语</div>' +
+      '<div class="ytx-vocab-toolbar">' +
+        '<span class="ytx-vocab-counter">共 ' + this.data.length + ' 个词汇/短语</span>' +
+        '<span class="ytx-mm-toolbar-spacer"></span>' +
+        '<button class="ytx-mm-tool-btn" data-action="refresh">换一批</button>' +
+        '<button class="ytx-mm-tool-btn" data-action="copy">复制</button>' +
+      '</div>' +
       '<div class="ytx-vocab-list">' +
         this.data.map(function (item) {
           return '<div class="ytx-vocab-item">' +
@@ -121,6 +119,14 @@ YTX.features.vocab = {
           '</div>';
         }).join('') +
       '</div>';
+
+    contentEl.querySelectorAll('.ytx-mm-tool-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var action = btn.dataset.action;
+        if (action === 'refresh') self.refresh();
+        else if (action === 'copy') self.copy();
+      });
+    });
   },
 
   copy: function () {
@@ -128,13 +134,11 @@ YTX.features.vocab = {
     var text = this.data.map(function (item) {
       return item.word + ' (' + item.pos + ') - ' + item.meaning;
     }).join('\n');
-    var btn = YTX.panel.querySelector('#ytx-copy-vocab');
+    var btn = YTX.panel.querySelector('#ytx-content-vocab .ytx-mm-tool-btn[data-action="copy"]');
     navigator.clipboard.writeText(text).then(function () {
-      btn.textContent = '已复制';
-      setTimeout(function () { btn.textContent = '复制'; }, 1500);
+      if (btn) { btn.textContent = '已复制'; setTimeout(function () { btn.textContent = '复制'; }, 1500); }
     }).catch(function () {
-      btn.textContent = '复制失败';
-      setTimeout(function () { btn.textContent = '复制'; }, 1500);
+      if (btn) { btn.textContent = '复制失败'; setTimeout(function () { btn.textContent = '复制'; }, 1500); }
     });
   },
 
@@ -147,13 +151,9 @@ YTX.features.vocab = {
 
     var btn = YTX.panel.querySelector('#ytx-generate-vocab');
     var contentEl = YTX.panel.querySelector('#ytx-content-vocab');
-    var copyBtn = YTX.panel.querySelector('#ytx-copy-vocab');
-    var refreshBtn = YTX.panel.querySelector('#ytx-refresh-vocab');
     btn.disabled = true;
-    copyBtn.style.display = 'none';
-    refreshBtn.style.display = 'none';
 
-    btn.textContent = '提取中...';
+    btn.innerHTML = YTX.icons.spinner;
     contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在换一批词汇...</span></div>';
 
     var refreshPrompt = YTX.prompts.VOCAB + '\n\n注意：以下词汇已经提取过，请排除它们，提取其他不同的词汇：\n' + excludeList;

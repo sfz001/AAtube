@@ -7,6 +7,7 @@ var YTX = {
   transcriptData: null,
   videoMode: false, // true = 无字幕，使用 Gemini 视频模式
   activeTab: 'summary',
+  isFetchingTranscript: false, // true = 正在获取字幕，禁止生成操作
   resizerInjected: false,
 
   // 各功能模块注册到这里
@@ -14,6 +15,31 @@ var YTX = {
 
   // 功能模块加载顺序（panel.js 中用于遍历）
   featureOrder: ['summary', 'html', 'chat', 'cards', 'mindmap', 'vocab'],
+};
+
+// ── 按钮图标 ─────────────────────────────────────────
+YTX.icons = {
+  zap: '<svg width="42" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+  play: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+  trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  refresh: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
+  spinner: '<svg class="ytx-btn-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>',
+};
+
+// 设置按钮为 refresh 灰色态 / 恢复 primary 态
+YTX.btnRefresh = function (btn) {
+  btn.innerHTML = YTX.icons.refresh;
+  btn.classList.remove('ytx-btn-primary');
+  btn.classList.add('ytx-btn-secondary');
+};
+YTX.btnPrimary = function (btn, icon) {
+  btn.innerHTML = icon || YTX.icons.play;
+  btn.classList.remove('ytx-btn-secondary');
+  btn.classList.add('ytx-btn-primary');
+};
+
+YTX.parseError = function (contentEl, label, err) {
+  contentEl.innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + label + '解析失败: ' + err.message + '<br>可尝试重新生成</div>';
 };
 
 // ── 工具函数 ──────────────────────────────────────────
@@ -87,12 +113,84 @@ YTX.extractJSON = function (text, type) {
   var pattern = type === 'object' ? /\{[\s\S]*\}/ : /\[[\s\S]*\]/;
   var match = text.match(pattern);
   if (!match) return null;
-  return JSON.parse(match[0]);
+
+  var raw = match[0];
+
+  // 尝试多种修复策略
+  var attempts = [
+    // 1. 原文直接解析
+    raw,
+    // 2. 去除尾逗号
+    raw.replace(/,\s*([}\]])/g, '$1'),
+    // 3. 转义字符串值内的换行符（逐字符扫描）
+    YTX._fixJsonStringEscapes(raw),
+    // 4. 对修复后的再去尾逗号
+    YTX._fixJsonStringEscapes(raw).replace(/,\s*([}\]])/g, '$1'),
+  ];
+
+  for (var i = 0; i < attempts.length; i++) {
+    try { return JSON.parse(attempts[i]); } catch (e) {}
+  }
+
+  // 5. 最后尝试：截断到最后一个完整对象
+  var lastBrace = raw.lastIndexOf('}');
+  if (lastBrace > 0) {
+    var truncated = raw.substring(0, lastBrace + 1);
+    if (type !== 'object') truncated += ']';
+    try { return JSON.parse(truncated); } catch (e) {}
+    // 截断后也试修复
+    truncated = YTX._fixJsonStringEscapes(truncated).replace(/,\s*([}\]])/g, '$1');
+    if (type !== 'object' && truncated.charAt(truncated.length - 1) !== ']') truncated += ']';
+    try { return JSON.parse(truncated); } catch (e) {}
+  }
+
+  // 全部失败，抛出错误
+  JSON.parse(raw);
+};
+
+// 修复 JSON 字符串值内未转义的控制字符
+YTX._fixJsonStringEscapes = function (str) {
+  var result = '';
+  var inString = false;
+  var i = 0;
+  while (i < str.length) {
+    var ch = str[i];
+    if (inString) {
+      if (ch === '\\') {
+        result += ch + (str[i + 1] || '');
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        // 检查这个引号是否真的结束字符串：后面应该是 , } ] : 或空白
+        var after = str.substring(i + 1).trimStart();
+        var nextCh = after[0];
+        if (!nextCh || nextCh === ',' || nextCh === '}' || nextCh === ']' || nextCh === ':') {
+          inString = false;
+          result += ch;
+        } else {
+          // 字符串值内的未转义引号
+          result += '\\"';
+        }
+        i++;
+        continue;
+      }
+      if (ch === '\n') { result += '\\n'; i++; continue; }
+      if (ch === '\r') { result += '\\r'; i++; continue; }
+      if (ch === '\t') { result += '\\t'; i++; continue; }
+      result += ch;
+    } else {
+      if (ch === '"') inString = true;
+      result += ch;
+    }
+    i++;
+  }
+  return result;
 };
 
 // ── 字幕截断保护（防止超出 API token 限制）────────────
 
-YTX.TRANSCRIPT_MAX_CHARS = 60000; // ~15k tokens，适配大多数模型上下文窗口
+YTX.TRANSCRIPT_MAX_CHARS = 200000; // ~50k tokens，当前支持的模型最小上下文为 128k tokens
 
 YTX.truncateTranscript = function (full) {
   if (full.length <= YTX.TRANSCRIPT_MAX_CHARS) return full;
@@ -174,6 +272,15 @@ YTX._analyzeVideoWithGemini = async function () {
 // ── 手动切换到视频模式 ──────────────────────────────
 
 YTX.switchToVideoMode = async function () {
+  if (YTX.isFetchingTranscript) return;
+  YTX.isFetchingTranscript = true;
+
+  // 禁用所有生成按钮
+  ['#ytx-generate-all', '#ytx-summarize', '#ytx-generate-html', '#ytx-generate-cards', '#ytx-generate-mindmap', '#ytx-generate-vocab'].forEach(function (id) {
+    var b = YTX.panel && YTX.panel.querySelector(id);
+    if (b) b.disabled = true;
+  });
+
   // 清空已有字幕数据
   YTX.transcriptData = null;
 
@@ -197,7 +304,16 @@ YTX.switchToVideoMode = async function () {
     });
   }
 
-  await YTX._analyzeVideoWithGemini();
+  try {
+    await YTX._analyzeVideoWithGemini();
+  } finally {
+    YTX.isFetchingTranscript = false;
+    // 恢复所有生成按钮
+    ['#ytx-generate-all', '#ytx-summarize', '#ytx-generate-html', '#ytx-generate-cards', '#ytx-generate-mindmap', '#ytx-generate-vocab'].forEach(function (id) {
+      var b = YTX.panel && YTX.panel.querySelector(id);
+      if (b) b.disabled = false;
+    });
+  }
 };
 
 // ── 确保字幕已加载（各模块共用）───────────────────────
@@ -210,6 +326,16 @@ YTX.ensureTranscript = async function () {
     YTX.renderTranscript(); // defined in panel.js
   } catch (err) {
     await YTX._analyzeVideoWithGemini();
+  }
+
+  // 缓存字幕数据
+  if (YTX.transcriptData && YTX.currentVideoId) {
+    YTX.cache.save(YTX.currentVideoId, 'transcript', {
+      segments: YTX.transcriptData.segments || null,
+      full: YTX.transcriptData.full,
+      truncated: YTX.transcriptData.truncated || false,
+      videoMode: YTX.videoMode,
+    });
   }
 };
 
@@ -273,15 +399,16 @@ YTX.cache = {
 // ── 全部生成（并行，跳过 chat）───────────────────────
 
 YTX.generateAll = async function () {
+  if (YTX.isFetchingTranscript) return;
   var keys = ['summary', 'html', 'cards', 'mindmap', 'vocab'];
   var allBtn = YTX.panel && YTX.panel.querySelector('#ytx-generate-all');
-  if (allBtn) { allBtn.disabled = true; allBtn.textContent = '生成中...'; }
+  if (allBtn) { allBtn.blur(); allBtn.disabled = true; allBtn.innerHTML = YTX.icons.spinner; }
 
   // 立即禁用所有功能按钮，避免等待字幕期间按钮仍可点击
   var btnIds = ['#ytx-summarize', '#ytx-generate-html', '#ytx-generate-cards', '#ytx-generate-mindmap', '#ytx-generate-vocab'];
   btnIds.forEach(function (id) {
     var b = YTX.panel && YTX.panel.querySelector(id);
-    if (b) { b.disabled = true; b.textContent = '等待中...'; }
+    if (b) { b.disabled = true; b.innerHTML = YTX.icons.spinner; }
   });
 
   // 先统一拿字幕，避免各模块重复获取
@@ -298,12 +425,15 @@ YTX.generateAll = async function () {
         f.onDone = origDone;
         f.onError = origError;
         origDone.call(f);
+        // 批量生成期间保持按钮禁用
+        btnIds.forEach(function (id) { var b = YTX.panel && YTX.panel.querySelector(id); if (b) b.disabled = true; });
         resolve();
       };
       f.onError = function (err) {
         f.onDone = origDone;
         f.onError = origError;
         origError.call(f, err);
+        btnIds.forEach(function (id) { var b = YTX.panel && YTX.panel.querySelector(id); if (b) b.disabled = true; });
         resolve();
       };
       f.start();
@@ -311,5 +441,6 @@ YTX.generateAll = async function () {
   });
 
   await Promise.all(promises);
-  if (allBtn) { allBtn.disabled = false; allBtn.textContent = '全部生成'; }
+  if (allBtn) { allBtn.disabled = false; allBtn.innerHTML = YTX.icons.zap; }
+  btnIds.forEach(function (id) { var b = YTX.panel && YTX.panel.querySelector(id); if (b) b.disabled = false; });
 };

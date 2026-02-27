@@ -1,7 +1,7 @@
 // src/mindmap.js — 思维导图（含 SVG 引擎）
 
 (function () {
-  // 布局常量
+  // 布局常量（左右结构，父节点顶部对齐）
   var MM_NODE_HEIGHT = 36;
   var MM_V_GAP = 18;
   var MM_H_GAP = 80;
@@ -49,20 +49,22 @@
     node._visibleChildren = visibleChildren;
   }
 
-  function positionMindmap(node, x, y) {
+  function positionMindmap(node, x, subtreeTop, alignTop) {
     node._x = x;
-    node._y = y;
 
     if (node._visibleChildren && node._visibleChildren.length > 0) {
       var hasToggle = node.children && node.children.length > 0;
       var childX = x + node._width + (hasToggle ? MM_TOGGLE_SPACE : 0) + MM_H_GAP;
       var totalChildHeight = node._visibleChildren.reduce(function (sum, c) { return sum + c._subtreeHeight; }, 0) + (node._visibleChildren.length - 1) * MM_V_GAP;
-      var childY = y + (node._subtreeHeight - totalChildHeight) / 2;
+      var childY = subtreeTop + (node._subtreeHeight - totalChildHeight) / 2;
       node._visibleChildren.forEach(function (child) {
-        var cy = childY + child._subtreeHeight / 2 - child._height / 2;
-        positionMindmap(child, childX, cy);
+        positionMindmap(child, childX, childY, alignTop);
         childY += child._subtreeHeight + MM_V_GAP;
       });
+      // 父节点对齐方式
+      node._y = alignTop ? node._visibleChildren[0]._y : subtreeTop + (node._subtreeHeight - node._height) / 2;
+    } else {
+      node._y = subtreeTop + (node._subtreeHeight - node._height) / 2;
     }
   }
 
@@ -151,7 +153,7 @@
   // ── 注册功能模块 ──────────────────────────────────────
 
   YTX.features.mindmap = {
-    tab: { key: 'mindmap', label: '导图' },
+    tab: { key: 'mindmap', label: '导图', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>' },
     prefix: 'MINDMAP',
     contentId: 'ytx-content-mindmap',
     actionsId: 'ytx-actions-mindmap',
@@ -163,6 +165,8 @@
     isGenerating: false,
     transform: { x: 0, y: 0, scale: 1 },
     collapsed: new Set(),
+    alignTop: false,
+    _fitted: false,
 
     reset: function () {
       this.data = null;
@@ -170,13 +174,12 @@
       this.isGenerating = false;
       this.transform = { x: 0, y: 0, scale: 1 };
       this.collapsed = new Set();
+      this._fitted = false;
+      // alignTop 不重置，保留用户设置
     },
 
     actionsHtml: function () {
-      return '<button id="ytx-generate-mindmap" class="ytx-btn ytx-btn-primary">生成导图</button>' +
-             '<button id="ytx-open-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">新标签打开</button>' +
-             '<button id="ytx-export-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">导出 SVG</button>' +
-             '<button id="ytx-export-notion-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">导出 Notion</button>';
+      return '<button id="ytx-generate-mindmap" class="ytx-btn ytx-btn-icon ytx-btn-primary" title="生成导图">' + YTX.icons.play + '</button>';
     },
 
     contentHtml: function () {
@@ -186,9 +189,6 @@
     bindEvents: function (panel) {
       var self = this;
       panel.querySelector('#ytx-generate-mindmap').addEventListener('click', function () { self.start(); });
-      panel.querySelector('#ytx-open-mindmap').addEventListener('click', function () { self.openInNewTab(); });
-      panel.querySelector('#ytx-export-mindmap').addEventListener('click', function () { self.exportSvg(); });
-      panel.querySelector('#ytx-export-notion-mindmap').addEventListener('click', function () { self.exportNotionMindmap(); });
     },
 
     start: async function () {
@@ -201,18 +201,14 @@
 
       var btn = YTX.panel.querySelector('#ytx-generate-mindmap');
       var contentEl = YTX.panel.querySelector('#ytx-content-mindmap');
-      var exportBtn = YTX.panel.querySelector('#ytx-export-mindmap');
       btn.disabled = true;
-      exportBtn.style.display = 'none';
-      YTX.panel.querySelector('#ytx-open-mindmap').style.display = 'none';
-      YTX.panel.querySelector('#ytx-export-notion-mindmap').style.display = 'none';
 
       try {
-        btn.textContent = '获取字幕中...';
+        btn.innerHTML = YTX.icons.spinner;
         contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div></div>';
         await YTX.ensureTranscript();
 
-        btn.textContent = '生成中...';
+        btn.innerHTML = YTX.icons.spinner;
         contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在生成思维导图...</span></div></div>';
 
         var settings = await YTX.getSettings();
@@ -228,7 +224,7 @@
       } catch (err) {
         contentEl.innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + err.message + '</div>';
         btn.disabled = false;
-        btn.textContent = '生成导图';
+        YTX.btnPrimary(btn);
         this.isGenerating = false;
       }
     },
@@ -244,14 +240,11 @@
           throw new Error('AI 返回的内容不包含有效 JSON，请重新生成');
         }
         this.render();
-        YTX.panel.querySelector('#ytx-open-mindmap').style.display = 'inline-block';
-        YTX.panel.querySelector('#ytx-export-mindmap').style.display = 'inline-block';
-        YTX.panel.querySelector('#ytx-export-notion-mindmap').style.display = 'inline-block';
       } catch (err) {
-        YTX.panel.querySelector('#ytx-content-mindmap').innerHTML = '<div class="ytx-error" style="margin:14px 16px">导图解析失败: ' + err.message + '<br>可尝试点击「重新生成」</div>';
+        YTX.parseError(YTX.panel.querySelector('#ytx-content-mindmap'), '导图', err);
       }
       YTX.panel.querySelector('#ytx-generate-mindmap').disabled = false;
-      YTX.panel.querySelector('#ytx-generate-mindmap').textContent = '重新生成';
+      YTX.btnRefresh(YTX.panel.querySelector('#ytx-generate-mindmap'));
       this.isGenerating = false;
       if (this.data) YTX.cache.save(YTX.currentVideoId, 'mindmap', { data: this.data });
     },
@@ -259,7 +252,7 @@
     onError: function (error) {
       YTX.panel.querySelector('#ytx-content-mindmap').innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + error + '</div>';
       YTX.panel.querySelector('#ytx-generate-mindmap').disabled = false;
-      YTX.panel.querySelector('#ytx-generate-mindmap').textContent = '生成导图';
+      YTX.btnPrimary(YTX.panel.querySelector('#ytx-generate-mindmap'));
       this.isGenerating = false;
     },
 
@@ -270,7 +263,7 @@
 
       assignNodeIds(this.data);
       layoutMindmap(this.data, this.collapsed);
-      positionMindmap(this.data, 30, 30);
+      positionMindmap(this.data, 30, 30, this.alignTop);
 
       var bounds = getMindmapBounds(this.data);
       var PAD = 40;
@@ -285,6 +278,11 @@
           '<button class="ytx-mm-zoom-btn" data-action="zoom-in" title="放大">+</button>' +
           '<button class="ytx-mm-zoom-btn" data-action="zoom-out" title="缩小">\u2212</button>' +
           '<button class="ytx-mm-zoom-btn" data-action="zoom-reset" title="重置">\u27F2</button>' +
+          '<button class="ytx-mm-zoom-btn ytx-mm-layout-btn" data-action="toggle-align" title="' + (self.alignTop ? '切换居中对齐' : '切换顶部对齐') + '">' + (self.alignTop ? '\u2261' : '\u2550') + '</button>' +
+          '<span class="ytx-mm-toolbar-spacer"></span>' +
+          '<button class="ytx-mm-tool-btn" data-action="open-tab">新标签打开</button>' +
+          '<button class="ytx-mm-tool-btn" data-action="export-svg">导出 SVG</button>' +
+          '<button class="ytx-mm-tool-btn" data-action="export-notion">导出到Notion</button>' +
         '</div>' +
         '<div class="ytx-mindmap-viewport">' +
           '<svg class="ytx-mindmap-svg" xmlns="http://www.w3.org/2000/svg">' +
@@ -297,8 +295,11 @@
       var svg = contentEl.querySelector('.ytx-mindmap-svg');
       var canvas = contentEl.querySelector('.ytx-mm-canvas');
       if (viewport && svg && canvas) {
-        var vw = viewport.clientWidth || 400;
-        var vh = viewport.clientHeight || 400;
+        var vw = viewport.clientWidth;
+        var vh = viewport.clientHeight;
+        if (vw > 0 && vh > 0) this._fitted = true;
+        vw = vw || 400;
+        vh = vh || 400;
         svg.setAttribute('width', vw);
         svg.setAttribute('height', vh);
 
@@ -386,8 +387,24 @@
             self.transform = { x: 0, y: 0, scale: 1 };
             self.render();
             return;
+          } else if (action === 'toggle-align') {
+            self.alignTop = !self.alignTop;
+            chrome.storage.sync.set({ mindmapAlignTop: self.alignTop });
+            self.transform = { x: 0, y: 0, scale: 1 };
+            self.render();
+            return;
           }
           canvas.setAttribute('transform', 'translate(' + self.transform.x + ',' + self.transform.y + ') scale(' + self.transform.scale + ')');
+        });
+      });
+
+      // 导出按钮
+      container.querySelectorAll('.ytx-mm-tool-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var action = btn.dataset.action;
+          if (action === 'open-tab') self.openInNewTab();
+          else if (action === 'export-svg') self.exportSvg();
+          else if (action === 'export-notion') self.exportNotionMindmap();
         });
       });
     },
@@ -484,22 +501,41 @@
 
     exportNotionMindmap: function () {
       if (!this.data) return;
-      var btn = YTX.panel.querySelector('#ytx-export-notion-mindmap');
-      btn.textContent = '导出中...';
+      var btn = YTX.panel.querySelector('.ytx-mm-tool-btn[data-action="export-notion"]');
+      btn.textContent = '导出到Notion...';
       btn.disabled = true;
       var blocks = YTX.Export.mindmapToNotionBlocks(this.data);
       var title = YTX.Export.getVideoTitle() + ' - 导图';
-      YTX.Export.sendToNotion(title, blocks, function (resp) {
+      var callback = function (resp) {
         if (resp.error) {
           btn.textContent = '导出失败';
           btn.disabled = false;
           alert(resp.error);
-          setTimeout(function () { btn.textContent = '导出 Notion'; }, 1500);
+          setTimeout(function () { btn.textContent = '导出到Notion'; }, 1500);
         } else {
           YTX.Export.flashButton(btn, '已导出', 2000);
           if (resp.url) window.open(resp.url, '_blank');
         }
-      });
+      };
+      // 尝试上传 SVG 到 Gist
+      var svgContent = null;
+      var result = this.buildExportSvg();
+      if (result) {
+        svgContent = new XMLSerializer().serializeToString(result.svg);
+      }
+      if (svgContent) {
+        var filename = YTX.Export.getSafeFilename(YTX.Export.getVideoTitle()) + '-导图.svg';
+        YTX.Export.sendToNotionWithGist(title, blocks, filename, svgContent, '思维导图 SVG', callback);
+      } else {
+        YTX.Export.sendToNotion(title, blocks, callback);
+      }
     },
   };
+
+  // 从存储加载对齐设置
+  chrome.storage.sync.get(['mindmapAlignTop'], function (data) {
+    if (typeof data.mindmapAlignTop === 'boolean') {
+      YTX.features.mindmap.alignTop = data.mindmapAlignTop;
+    }
+  });
 })();

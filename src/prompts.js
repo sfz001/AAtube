@@ -2,15 +2,21 @@
 
 YTX.prompts = {};
 
-YTX.prompts.DEFAULT = `请对以下 YouTube 视频字幕内容进行总结。
+YTX.prompts.DEFAULT = `【重要】无论字幕是什么语言，你必须全程使用简体中文回答，禁止使用其他任何语言。
+
+请对以下 YouTube 视频字幕内容进行总结。
 
 ## 输出格式：
 
 ### 摘要
 3-5句话概述视频主要内容
 
+---
+
 ### 关键要点
 提取 3-5 个最重要的收获，每个一句话
+
+---
 
 ### 详细内容
 按内容分段，标注时间戳 [MM:SS]：
@@ -28,7 +34,9 @@ YTX.prompts.DEFAULT = `请对以下 YouTube 视频字幕内容进行总结。
 字幕内容：
 {transcript}`;
 
-YTX.prompts.HTML = `请根据以下 YouTube 视频字幕内容，生成一个精美的 HTML 笔记页面。
+YTX.prompts.HTML = `【重要】无论字幕是什么语言，你必须全程使用简体中文，禁止使用其他任何语言。
+
+请根据以下 YouTube 视频字幕内容，生成一个精美的 HTML 笔记页面。
 
 要求：
 1. 必须使用简体中文，不要使用繁体中文
@@ -42,7 +50,9 @@ YTX.prompts.HTML = `请根据以下 YouTube 视频字幕内容，生成一个精
 字幕内容：
 {transcript}`;
 
-YTX.prompts.CARDS = `请根据以下 YouTube 视频字幕内容，生成知识卡片（Flashcards）用于学习复习。
+YTX.prompts.CARDS = `【重要】无论字幕是什么语言，你必须全程使用简体中文，禁止使用其他任何语言。
+
+请根据以下 YouTube 视频字幕内容，生成知识卡片（Flashcards）用于学习复习。
 
 要求：
 1. 必须使用简体中文，不要使用繁体中文
@@ -55,7 +65,9 @@ YTX.prompts.CARDS = `请根据以下 YouTube 视频字幕内容，生成知识�
 字幕内容：
 {transcript}`;
 
-YTX.prompts.MINDMAP = `请根据以下 YouTube 视频字幕内容，生成一个结构化的思维导图 JSON 数据。
+YTX.prompts.MINDMAP = `【重要】无论字幕是什么语言，所有内容必须使用简体中文，禁止使用其他任何语言。
+
+请根据以下 YouTube 视频字幕内容，生成一个结构化的思维导图 JSON 数据。
 
 要求：
 1. 输出一个嵌套的 JSON 对象树，根节点是视频主题

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>AATube</h1>
+      <span class="subtitle">YouTube 视频 AI 助手</span>
+    </div>
+
+    <div class="section">
+      <div class="provider-tabs">
+        <button class="provider-tab active" data-provider="claude">Claude</button>
+        <button class="provider-tab" data-provider="openai">OpenAI</button>
+        <button class="provider-tab" data-provider="gemini">Gemini</button>
+      </div>
+
+      <div class="field">
+        <label for="currentKey">
+          <span id="keyLabel">Claude API Key</span>
+          <a id="helpLink" href="https://console.anthropic.com/settings/keys" target="_blank" class="help-link">获取</a>
+        </label>
+        <div class="input-wrap">
+          <input type="password" id="currentKey" placeholder="sk-ant-api03-...">
+          <button id="toggleKey" class="btn-icon" title="显示/隐藏">👁</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="model">模型</label>
+        <select id="model"></select>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="field">
+        <div class="label-row">
+          <label for="prompt">自定义 Prompt</label>
+          <button id="resetPrompt" class="btn-link">恢复默认</button>
+        </div>
+        <textarea id="prompt" rows="12" spellcheck="false"></textarea>
+        <div class="hint">用 <code>{transcript}</code> 表示字幕内容插入位置</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">Notion 导出</div>
+
+      <div class="field">
+        <label for="notionToken">
+          <span>Integration Token</span>
+          <a href="https://www.notion.so/my-integrations" target="_blank" class="help-link">获取</a>
+        </label>
+        <div class="input-wrap">
+          <input type="password" id="notionToken" placeholder="ntn_...">
+          <button id="toggleNotionToken" class="btn-icon" title="显示/隐藏">👁</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="notionPageId">父级页面</label>
+        <input type="text" id="notionPageId" placeholder="页面链接或 32 位 ID">
+        <div class="hint">需将集成邀请（Connections）到目标页面</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">GitHub Gist（原文件上传）</div>
+      <div class="hint" style="margin-bottom:10px">导出到 Notion 时，将 HTML 笔记 / SVG 导图原文件上传到 Gist 并在页面中嵌入链接</div>
+
+      <div class="field">
+        <label for="githubToken">
+          <span>Personal Access Token</span>
+          <a href="https://github.com/settings/tokens/new?scopes=gist&description=AATube" target="_blank" class="help-link">获取</a>
+        </label>
+        <div class="input-wrap">
+          <input type="password" id="githubToken" placeholder="ghp_...">
+          <button id="toggleGithubToken" class="btn-icon" title="显示/隐藏">&#128065;</button>
+        </div>
+        <div class="hint">仅需 gist 权限，无 token 时导出 Notion 不受影响</div>
+      </div>
+    </div>
+
+    <button id="save" class="btn-primary">保存设置</button>
+    <div id="status" class="status"></div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

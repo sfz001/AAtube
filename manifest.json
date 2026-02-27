@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AATube - 视频总结",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "使用 Claude AI 总结 YouTube 视频内容，支持时间戳跳转",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
@@ -9,7 +9,8 @@
     "https://api.openai.com/*",
     "https://generativelanguage.googleapis.com/*",
     "https://www.youtube.com/*",
-    "https://api.notion.com/*"
+    "https://api.notion.com/*",
+    "https://api.github.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -35,13 +36,13 @@
     }
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
+  "options_page": "options.html",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
