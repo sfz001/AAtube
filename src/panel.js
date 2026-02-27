@@ -139,6 +139,10 @@
       YTX.panel.querySelector('#' + f.actionsId).style.display = isActive ? 'flex' : 'none';
     });
 
+    // 字幕区只在总结标签下显示
+    var transcriptSection = YTX.panel.querySelector('#ytx-transcript-section');
+    if (transcriptSection) transcriptSection.style.display = tab === 'summary' ? 'block' : 'none';
+
     if (tab === 'chat') {
       var input = YTX.panel.querySelector('#ytx-chat-input');
       setTimeout(function () { input.focus(); }, 100);

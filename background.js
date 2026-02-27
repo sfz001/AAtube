@@ -210,9 +210,11 @@ async function scrapeTranscriptFromDOM(videoId) {
     // 从 DOM 中读取字幕段落
     const segments = [];
 
-    const segmentElements = transcriptPanel.querySelectorAll(
-      'ytd-transcript-segment-renderer, ytd-transcript-segment-list-renderer .segment'
-    );
+    // 优先用 ytd-transcript-segment-renderer，找不到再用 .segment，避免重复匹配
+    let segmentElements = transcriptPanel.querySelectorAll('ytd-transcript-segment-renderer');
+    if (segmentElements.length === 0) {
+      segmentElements = transcriptPanel.querySelectorAll('ytd-transcript-segment-list-renderer .segment');
+    }
 
     addLog('找到 segment 元素: ' + segmentElements.length);
 
