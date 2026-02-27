@@ -26,6 +26,7 @@
     if (videoId === YTX.currentVideoId && YTX.panel) return;
     YTX.currentVideoId = videoId;
     YTX.transcriptData = null;
+    YTX.videoMode = false;
     YTX.activeTab = 'summary';
 
     // 重置所有功能模块状态
@@ -34,7 +35,65 @@
       if (f && f.reset) f.reset();
     });
 
-    waitForContainer(function () { injectPanel(); });
+    waitForContainer(function () {
+      injectPanel();
+      restoreFromCache(videoId);
+    });
+  }
+
+  function restoreFromCache(videoId) {
+    YTX.cache.load(videoId).then(function (record) {
+      if (!record || !YTX.panel) return;
+
+      // 总结
+      if (record.summary && record.summary.text) {
+        var s = YTX.features.summary;
+        s.text = record.summary.text;
+        var el = YTX.panel.querySelector('#ytx-content');
+        if (el) el.innerHTML = YTX.renderMarkdown(s.text);
+        YTX.panel.querySelector('#ytx-summarize').textContent = '重新总结';
+      }
+
+      // 笔记
+      if (record.html && record.html.text) {
+        var h = YTX.features.html;
+        h.text = record.html.text;
+        h.renderToIframe(h.text);
+        YTX.panel.querySelector('#ytx-generate-html').textContent = '重新生成';
+        YTX.panel.querySelector('#ytx-open-html').style.display = 'inline-block';
+        YTX.panel.querySelector('#ytx-dl-html').style.display = 'inline-block';
+        YTX.panel.querySelector('#ytx-export-notion-html').style.display = 'inline-block';
+      }
+
+      // 卡片
+      if (record.cards && record.cards.data && record.cards.data.length > 0) {
+        var c = YTX.features.cards;
+        c.data = record.cards.data;
+        c.render();
+        YTX.panel.querySelector('#ytx-generate-cards').textContent = '重新生成';
+      }
+
+      // 导图
+      if (record.mindmap && record.mindmap.data) {
+        var m = YTX.features.mindmap;
+        m.data = record.mindmap.data;
+        m.render();
+        YTX.panel.querySelector('#ytx-generate-mindmap').textContent = '重新生成';
+        YTX.panel.querySelector('#ytx-open-mindmap').style.display = 'inline-block';
+        YTX.panel.querySelector('#ytx-export-mindmap').style.display = 'inline-block';
+        YTX.panel.querySelector('#ytx-export-notion-mindmap').style.display = 'inline-block';
+      }
+
+      // 词汇
+      if (record.vocab && record.vocab.data && record.vocab.data.length > 0) {
+        var v = YTX.features.vocab;
+        v.data = record.vocab.data;
+        v.render();
+        YTX.panel.querySelector('#ytx-generate-vocab').textContent = '重新提取';
+        YTX.panel.querySelector('#ytx-copy-vocab').style.display = 'inline-block';
+        YTX.panel.querySelector('#ytx-refresh-vocab').style.display = 'inline-block';
+      }
+    });
   }
 
   function getVideoId() {
@@ -82,7 +141,7 @@
 
     panel.innerHTML =
       '<div id="ytx-header">' +
-        '<span class="ytx-title">YouTubeX</span>' +
+        '<span class="ytx-title">AATube</span>' +
         '<div id="ytx-actions">' + actionsHtml + '</div>' +
       '</div>' +
       '<div id="ytx-tabs">' + tabsHtml + '</div>' +
@@ -154,7 +213,30 @@
   YTX.renderTranscript = function () {
     if (!YTX.transcriptData || !YTX.panel) return;
     var body = YTX.panel.querySelector('#ytx-transcript-body');
-    body.innerHTML = YTX.transcriptData.segments.map(function (s) {
+
+    // 视频模式：只有 full 文本，没有 segments
+    if (!YTX.transcriptData.segments) {
+      var lines = YTX.transcriptData.full.split('\n').filter(function (l) { return l.trim(); });
+      body.innerHTML =
+        '<div class="ytx-warning" style="padding:6px 12px;font-size:11px;color:#7c3aed;background:#ede9fe;border-radius:6px;margin-bottom:6px">该视频无字幕，以下为 Gemini 视频分析内容</div>' +
+        lines.map(function (line) {
+          var m = line.match(/^\[(\d+:\d+)\]\s*(.*)/);
+          if (m) {
+            var seconds = YTX.timeToSeconds(m[1]);
+            return '<div class="ytx-transcript-line">' +
+              '<span class="ytx-ts" data-time="' + seconds + '">[' + m[1] + ']</span>' +
+              '<span>' + YTX.escapeHtml(m[2]) + '</span>' +
+            '</div>';
+          }
+          return '<div class="ytx-transcript-line"><span>' + YTX.escapeHtml(line) + '</span></div>';
+        }).join('');
+      return;
+    }
+
+    var warn = YTX.transcriptData.truncated
+      ? '<div class="ytx-warning" style="padding:6px 12px;font-size:11px;color:#b45309;background:#fef3c7;border-radius:6px;margin-bottom:6px">字幕较长，已截断至前 ' + Math.round(YTX.TRANSCRIPT_MAX_CHARS / 1000) + 'k 字符，后半部分内容可能不会被 AI 分析到</div>'
+      : '';
+    body.innerHTML = warn + YTX.transcriptData.segments.map(function (s) {
       return '<div class="ytx-transcript-line">' +
         '<span class="ytx-ts" data-time="' + s.start + '">' + YTX.fmtTime(s.start) + '</span>' +
         '<span>' + YTX.escapeHtml(s.text) + '</span>' +
@@ -219,7 +301,8 @@
       overlay.style.display = 'block';
     });
 
-    document.addEventListener('mousemove', function (e) {
+    // 保存引用以便清理
+    YTX._resizerOnMove = function (e) {
       if (!isDragging) return;
       var columnsRect = columns.getBoundingClientRect();
       var totalWidth = columnsRect.width;
@@ -240,9 +323,9 @@
       secondary.style.flex = 'none';
 
       forceVideoResize(primary);
-    });
+    };
 
-    document.addEventListener('mouseup', function () {
+    YTX._resizerOnUp = function () {
       if (!isDragging) return;
       isDragging = false;
       resizer.classList.remove('ytx-resizer-active');
@@ -251,7 +334,10 @@
       var overlay = document.getElementById('ytx-drag-overlay');
       if (overlay) overlay.style.display = 'none';
       forceVideoResize(primary);
-    });
+    };
+
+    document.addEventListener('mousemove', YTX._resizerOnMove);
+    document.addEventListener('mouseup', YTX._resizerOnUp);
   }
 
   function forceVideoResize(primary) {
@@ -274,6 +360,10 @@
   }
 
   function removeResizer() {
+    // 清理 document 级事件监听器
+    if (YTX._resizerOnMove) { document.removeEventListener('mousemove', YTX._resizerOnMove); YTX._resizerOnMove = null; }
+    if (YTX._resizerOnUp) { document.removeEventListener('mouseup', YTX._resizerOnUp); YTX._resizerOnUp = null; }
+
     var resizer = document.getElementById('ytx-resizer');
     if (resizer) resizer.remove();
     var overlay = document.getElementById('ytx-drag-overlay');

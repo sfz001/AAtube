@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "YouTubeX - 视频总结",
+  "name": "AATube - 视频总结",
   "version": "1.0.0",
   "description": "使用 Claude AI 总结 YouTube 视频内容，支持时间戳跳转",
   "permissions": ["storage", "activeTab", "scripting"],
@@ -8,7 +8,8 @@
     "https://api.anthropic.com/*",
     "https://api.openai.com/*",
     "https://generativelanguage.googleapis.com/*",
-    "https://www.youtube.com/*"
+    "https://www.youtube.com/*",
+    "https://api.notion.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -20,6 +21,7 @@
         "src/core.js",
         "src/prompts.js",
         "src/markdown.js",
+        "src/export.js",
         "src/summary.js",
         "src/html-notes.js",
         "src/chat.js",

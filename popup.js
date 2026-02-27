@@ -41,9 +41,8 @@ const PROVIDERS = {
     placeholder: 'sk-...',
     helpUrl: 'https://platform.openai.com/api-keys',
     models: [
-      { value: 'gpt-5.2', label: 'GPT-5.2 — 最强' },
-      { value: 'gpt-5-mini', label: 'GPT-5 mini — 推荐' },
-      { value: 'gpt-5-nano', label: 'GPT-5 nano — 最快' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o mini — 推荐' },
+      { value: 'gpt-4o', label: 'GPT-4o — 最强' },
     ]
   },
   gemini: {
@@ -52,8 +51,9 @@ const PROVIDERS = {
     placeholder: 'AIza...',
     helpUrl: 'https://aistudio.google.com/apikey',
     models: [
-      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash — 推荐' },
-      { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro — 最强' },
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — 推荐' },
+      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash — 更快' },
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro — 最强' },
     ]
   }
 };
@@ -65,8 +65,20 @@ let currentProvider = 'claude';
 let keyCache = { apiKey: '', openaiKey: '', geminiKey: '' };
 let modelCache = { claude: '', openai: '', gemini: '' };
 
+function parseNotionPageId(input) {
+  if (!input) return '';
+  input = input.trim();
+  // Raw 32-char hex ID (with or without dashes)
+  var rawId = input.replace(/-/g, '');
+  if (/^[0-9a-f]{32}$/i.test(rawId)) return rawId;
+  // Extract from Notion URL: last 32 hex chars before optional query
+  var match = input.match(/([0-9a-f]{32})/i);
+  if (match) return match[1];
+  return input;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.sync.get(['provider', 'apiKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt'], (data) => {
+  chrome.storage.sync.get(['provider', 'apiKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt', 'notionToken', 'notionPageId'], (data) => {
     keyCache.apiKey = data.apiKey || '';
     keyCache.openaiKey = data.openaiKey || '';
     keyCache.geminiKey = data.geminiKey || '';
@@ -84,6 +96,10 @@ document.addEventListener('DOMContentLoaded', () => {
     switchProvider(currentProvider);
 
     $('#prompt').value = data.prompt || DEFAULT_PROMPT;
+
+    // Notion settings
+    $('#notionToken').value = data.notionToken || '';
+    $('#notionPageId').value = data.notionPageId || '';
   });
 
   // Provider tab clicks
@@ -108,6 +124,11 @@ document.addEventListener('DOMContentLoaded', () => {
     input.type = input.type === 'password' ? 'text' : 'password';
   });
 
+  $('#toggleNotionToken').addEventListener('click', () => {
+    const input = $('#notionToken');
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+
   $('#save').addEventListener('click', () => {
     const cfg = PROVIDERS[currentProvider];
     const key = $('#currentKey').value.trim();
@@ -128,6 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
     keyCache[cfg.keyField] = key;
     modelCache[currentProvider] = model;
 
+    // Notion settings
+    const notionToken = $('#notionToken').value.trim();
+    const notionPageId = parseNotionPageId($('#notionPageId').value);
+
     // Save all keys + per-provider models, remove legacy global 'model' field
     chrome.storage.sync.remove('model');
     chrome.storage.sync.set({
@@ -139,6 +164,8 @@ document.addEventListener('DOMContentLoaded', () => {
       openaiModel: modelCache.openai,
       geminiModel: modelCache.gemini,
       prompt,
+      notionToken,
+      notionPageId,
     }, () => {
       showStatus('设置已保存 ✓', 'success');
     });

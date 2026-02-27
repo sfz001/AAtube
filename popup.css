@@ -36,6 +36,15 @@ h1 {
   margin-bottom: 16px;
 }
 
+.section-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
 .provider-tabs {
   display: flex;
   gap: 6px;

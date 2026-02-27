@@ -35,6 +35,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ started: true });
     return true;
   }
+  if (message.type === 'TRANSCRIBE_VIDEO') {
+    handleTranscribeVideo(message).then(sendResponse);
+    return true;
+  }
+  if (message.type === 'EXPORT_NOTION') {
+    handleExportNotion(message).then(sendResponse);
+    return true;
+  }
   return false;
 });
 
@@ -63,7 +71,7 @@ async function scrapeTranscriptFromDOM(videoId) {
   const log = [];
   function addLog(msg) {
     log.push(msg);
-    console.log('[YouTubeX]', msg);
+    console.log('[AATube]', msg);
   }
 
   function sleep(ms) {
@@ -310,7 +318,6 @@ function safeSend(tabId, msg) {
 async function handleSummarize(message, tabId, mode = 'SUMMARY') {
   const { transcript, prompt, model, activeKey } = message;
   const provider = message.provider || 'claude';
-  // 向下兼容：旧版 content.js 可能还传 apiKey
   const key = activeKey || message.apiKey;
   const PREFIX = mode;
 
@@ -357,13 +364,116 @@ function sanitizeModel(provider, model) {
   return (prefix && model.startsWith(prefix)) ? model : '';
 }
 
+// ── Service Worker 保活（防止视频处理期间被终止）──────────
+function startKeepalive() {
+  const id = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
+  return () => clearInterval(id);
+}
+
+// ── 视频转录（一次性生成虚拟字幕）─────────────────────────
+async function handleTranscribeVideo(message) {
+  const { videoUrl, activeKey } = message;
+  const key = activeKey;
+  const model = 'gemini-2.5-flash';
+
+  if (!key) return { error: '请先在扩展设置中填入 Gemini API Key' };
+
+  const stopKeepalive = startKeepalive();
+  try {
+    console.log('[AATube] 视频转录开始:', videoUrl);
+
+    const body = {
+      contents: [{
+        parts: [
+          { text: '请详细描述这个视频的完整内容。按时间顺序逐段描述，标注时间戳 [MM:SS]。输出纯文本，不要用 Markdown 格式。要求：\n1. 尽可能详细还原视频中说的每一个要点\n2. 保留专业术语和关键数据\n3. 每段用时间戳开头，如 [00:00] [01:30]\n4. 必须使用简体中文描述，不要使用繁体中文' },
+          { file_data: { file_uri: videoUrl } }
+        ]
+      }],
+      generationConfig: { maxOutputTokens: 8096 }
+    };
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[AATube] 视频转录失败:', response.status, errText);
+      return { error: classifyApiError(response.status, errText, 'gemini') };
+    }
+
+    const result = await response.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) {
+      const reason = result.candidates?.[0]?.finishReason || result.promptFeedback?.blockReason || '未知原因';
+      return { error: '视频转录无结果: ' + reason };
+    }
+
+    console.log('[AATube] 视频转录完成，长度:', text.length);
+    return { text };
+  } catch (err) {
+    console.error('[AATube] 视频转录异常:', err);
+    return { error: '视频分析失败: ' + (err.message || '') };
+  } finally {
+    stopKeepalive();
+  }
+}
+
+// ── API 错误分类提示 ─────────────────────────────────────
+function classifyApiError(status, body, provider) {
+  const lower = body.toLowerCase();
+  const providerName = { claude: 'Claude', openai: 'OpenAI', gemini: 'Gemini' }[provider] || provider;
+
+  // 401 / 403 — 认证失败
+  if (status === 401 || status === 403 || lower.includes('invalid_api_key') || lower.includes('invalid api key') || lower.includes('unauthorized') || lower.includes('api_key_invalid')) {
+    return `${providerName} API Key 无效或已过期，请在扩展设置中检查 Key 是否正确`;
+  }
+
+  // 429 — 限流 / 配额用尽
+  if (status === 429 || lower.includes('rate_limit') || lower.includes('rate limit') || lower.includes('quota')) {
+    if (lower.includes('quota') || lower.includes('billing') || lower.includes('exceeded') || lower.includes('insufficient')) {
+      return `${providerName} 账户余额不足或配额已用完，请前往 ${providerName} 控制台充值`;
+    }
+    return `${providerName} 请求太频繁，请稍等几秒后重试`;
+  }
+
+  // 400 — 请求错误
+  if (status === 400) {
+    if (lower.includes('context_length') || lower.includes('max_tokens') || lower.includes('token') || lower.includes('too long') || lower.includes('too large')) {
+      return '视频内容太长，超出模型上下文限制。可尝试换一个支持更长上下文的模型';
+    }
+    if (lower.includes('model')) {
+      return `所选模型不可用，请在扩展设置中更换 ${providerName} 模型`;
+    }
+    return `请求参数错误 (${status}): ${body.substring(0, 200)}`;
+  }
+
+  // 404 — 模型不存在
+  if (status === 404) {
+    return `所选模型不存在或未开通权限，请在扩展设置中更换 ${providerName} 模型`;
+  }
+
+  // 500+ — 服务端错误
+  if (status >= 500) {
+    return `${providerName} 服务暂时不可用 (${status})，请稍后重试`;
+  }
+
+  // 其他
+  return `${providerName} API 错误 (${status}): ${body.substring(0, 200)}`;
+}
+
 // ── 统一调用入口 ─────────────────────────────────────────
 async function callProvider(provider, opts) {
   const { key, systemPrompt, messages, maxTokens, tabId, PREFIX } = opts;
   const model = sanitizeModel(provider, opts.model);
 
   // 计算实际使用的模型 ID
-  const DEFAULT_MODEL = { claude: 'claude-sonnet-4-6', openai: 'gpt-5-mini', gemini: 'gemini-3-flash-preview' };
+  const DEFAULT_MODEL = { claude: 'claude-sonnet-4-6', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash' };
   const actualModel = model || DEFAULT_MODEL[provider] || DEFAULT_MODEL.claude;
 
   // 通知 content.js 当前使用的模型
@@ -427,14 +537,20 @@ async function callProvider(provider, opts) {
     }
 
     if (!response.ok) {
-      const err = await response.text();
-      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `API 错误 (${response.status}): ${err}` });
+      const errText = await response.text();
+      const friendlyError = classifyApiError(response.status, errText, provider);
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: friendlyError });
       return;
     }
 
     await readSSEStream(response, tabId, PREFIX, provider);
   } catch (err) {
-    safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${err.message}` });
+    const msg = err.message || '';
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('net::')) {
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: '网络连接失败，请检查网络后重试' });
+    } else {
+      safeSend(tabId, { type: `${PREFIX}_ERROR`, error: `请求失败: ${msg}` });
+    }
   }
 }
 
@@ -495,5 +611,59 @@ async function readSSEStream(response, tabId, PREFIX, provider) {
 
   if (!doneSent) {
     safeSend(tabId, { type: `${PREFIX}_DONE` });
+  }
+}
+
+// ── Notion 导出 ──────────────────────────────────────
+async function handleExportNotion(message) {
+  const { token, pageId, title, blocks } = message;
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'Notion-Version': '2022-06-28',
+  };
+
+  try {
+    // 首批最多 100 块
+    const firstBatch = blocks.slice(0, 100);
+    const resp = await fetch('https://api.notion.com/v1/pages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        parent: { page_id: pageId },
+        properties: {
+          title: { title: [{ text: { content: title } }] }
+        },
+        children: firstBatch,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      return { error: `Notion API 错误 (${resp.status}): ${err}` };
+    }
+
+    const page = await resp.json();
+    const newPageId = page.id;
+
+    // 超出 100 块，分批追加
+    if (blocks.length > 100) {
+      for (let i = 100; i < blocks.length; i += 100) {
+        const batch = blocks.slice(i, i + 100);
+        const appendResp = await fetch(`https://api.notion.com/v1/blocks/${newPageId}/children`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ children: batch }),
+        });
+        if (!appendResp.ok) {
+          const err = await appendResp.text();
+          return { error: `追加内容失败 (${appendResp.status}): ${err}` };
+        }
+      }
+    }
+
+    return { success: true, url: page.url };
+  } catch (err) {
+    return { error: `导出失败: ${err.message}` };
   }
 }

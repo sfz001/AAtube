@@ -71,23 +71,23 @@ YTX.features.chat = {
     msgContainer.scrollTop = msgContainer.scrollHeight;
 
     this.messages.push({ role: 'user', content: question });
+    // 保留最近 40 条消息（约 20 轮对话），防止超 token 限制
+    if (this.messages.length > 40) this.messages = this.messages.slice(-40);
 
     try {
-      if (!YTX.transcriptData) {
-        aiBubble.innerHTML = '<div class="ytx-loading"><div class="ytx-spinner"></div><span>获取字幕中...</span></div>';
-        YTX.transcriptData = await YTX.fetchTranscript();
-        YTX.renderTranscript();
-      }
+      aiBubble.innerHTML = '<div class="ytx-loading"><div class="ytx-spinner"></div><span>获取字幕中...</span></div>';
+      await YTX.ensureTranscript();
 
       var settings = await YTX.getSettings();
-      chrome.runtime.sendMessage({
+      var payload = YTX.getContentPayload();
+
+      chrome.runtime.sendMessage(Object.assign({
         type: 'CHAT_ASK',
-        transcript: YTX.transcriptData.full,
         messages: this.messages,
         provider: settings.provider,
         activeKey: settings.activeKey,
         model: settings.model,
-      });
+      }, payload));
     } catch (err) {
       aiBubble.innerHTML = '<span class="ytx-chat-err">' + err.message + '</span>';
       this.isChatting = false;

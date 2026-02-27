@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**YouTubeX** — 一个自用的 Chrome 扩展（Manifest V3），使用 Claude API 在 YouTube 页面内直接总结视频内容。
+**AATube** — 一个自用的 Chrome 扩展（Manifest V3），使用 Claude API 在 YouTube 页面内直接总结视频内容。
 
 ## Architecture
 

@@ -42,25 +42,23 @@ YTX.features.cards = {
     btn.disabled = true;
 
     try {
-      if (!YTX.transcriptData) {
-        btn.textContent = '获取字幕中...';
-        contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
-        YTX.transcriptData = await YTX.fetchTranscript();
-        YTX.renderTranscript();
-      }
+      btn.textContent = '获取字幕中...';
+      contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
+      await YTX.ensureTranscript();
 
       btn.textContent = '生成中...';
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在生成知识卡片...</span></div>';
 
       var settings = await YTX.getSettings();
-      chrome.runtime.sendMessage({
+      var payload = YTX.getContentPayload();
+
+      chrome.runtime.sendMessage(Object.assign({
         type: 'GENERATE_CARDS',
-        transcript: YTX.transcriptData.full,
         prompt: YTX.prompts.CARDS,
         provider: settings.provider,
         activeKey: settings.activeKey,
         model: settings.model,
-      });
+      }, payload));
     } catch (err) {
       contentEl.innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + err.message + '</div>';
       btn.disabled = false;
@@ -75,19 +73,18 @@ YTX.features.cards = {
 
   onDone: function () {
     try {
-      var jsonMatch = this.rawText.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        this.data = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('未找到有效的 JSON 数据');
+      this.data = YTX.extractJSON(this.rawText, 'array');
+      if (!this.data) {
+        throw new Error('AI 返回的内容不包含有效 JSON，请重新生成');
       }
       this.render();
     } catch (err) {
-      YTX.panel.querySelector('#ytx-content-cards').innerHTML = '<div class="ytx-error" style="margin:14px 16px">卡片解析失败: ' + err.message + '</div>';
+      YTX.panel.querySelector('#ytx-content-cards').innerHTML = '<div class="ytx-error" style="margin:14px 16px">卡片解析失败: ' + err.message + '<br>可尝试点击「重新生成」</div>';
     }
     YTX.panel.querySelector('#ytx-generate-cards').disabled = false;
     YTX.panel.querySelector('#ytx-generate-cards').textContent = '重新生成';
     this.isGenerating = false;
+    if (this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'cards', { data: this.data });
   },
 
   onError: function (error) {

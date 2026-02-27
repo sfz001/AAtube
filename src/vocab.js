@@ -48,25 +48,23 @@ YTX.features.vocab = {
     copyBtn.style.display = 'none';
 
     try {
-      if (!YTX.transcriptData) {
-        btn.textContent = '获取字幕中...';
-        contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
-        YTX.transcriptData = await YTX.fetchTranscript();
-        YTX.renderTranscript();
-      }
+      btn.textContent = '获取字幕中...';
+      contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
+      await YTX.ensureTranscript();
 
       btn.textContent = '提取中...';
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在提取词汇短语...</span></div>';
 
       var settings = await YTX.getSettings();
-      chrome.runtime.sendMessage({
+      var payload = YTX.getContentPayload();
+
+      chrome.runtime.sendMessage(Object.assign({
         type: 'GENERATE_VOCAB',
-        transcript: YTX.transcriptData.full,
         prompt: YTX.prompts.VOCAB,
         provider: settings.provider,
         activeKey: settings.activeKey,
         model: settings.model,
-      });
+      }, payload));
     } catch (err) {
       contentEl.innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + err.message + '</div>';
       btn.disabled = false;
@@ -81,21 +79,20 @@ YTX.features.vocab = {
 
   onDone: function () {
     try {
-      var jsonMatch = this.text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        this.data = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('未找到有效的 JSON 数据');
+      this.data = YTX.extractJSON(this.text, 'array');
+      if (!this.data) {
+        throw new Error('AI 返回的内容不包含有效 JSON，请重新生成');
       }
       this.render();
       YTX.panel.querySelector('#ytx-copy-vocab').style.display = 'inline-block';
       YTX.panel.querySelector('#ytx-refresh-vocab').style.display = 'inline-block';
     } catch (err) {
-      YTX.panel.querySelector('#ytx-content-vocab').innerHTML = '<div class="ytx-error" style="margin:14px 16px">词汇解析失败: ' + err.message + '</div>';
+      YTX.panel.querySelector('#ytx-content-vocab').innerHTML = '<div class="ytx-error" style="margin:14px 16px">词汇解析失败: ' + err.message + '<br>可尝试点击「重新提取」</div>';
     }
     YTX.panel.querySelector('#ytx-generate-vocab').disabled = false;
     YTX.panel.querySelector('#ytx-generate-vocab').textContent = '重新提取';
     this.isGenerating = false;
+    if (this.data.length > 0) YTX.cache.save(YTX.currentVideoId, 'vocab', { data: this.data });
   },
 
   onError: function (error) {
@@ -131,9 +128,12 @@ YTX.features.vocab = {
     var text = this.data.map(function (item) {
       return item.word + ' (' + item.pos + ') - ' + item.meaning;
     }).join('\n');
+    var btn = YTX.panel.querySelector('#ytx-copy-vocab');
     navigator.clipboard.writeText(text).then(function () {
-      var btn = YTX.panel.querySelector('#ytx-copy-vocab');
       btn.textContent = '已复制';
+      setTimeout(function () { btn.textContent = '复制'; }, 1500);
+    }).catch(function () {
+      btn.textContent = '复制失败';
       setTimeout(function () { btn.textContent = '复制'; }, 1500);
     });
   },
@@ -157,16 +157,16 @@ YTX.features.vocab = {
     contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在换一批词汇...</span></div>';
 
     var refreshPrompt = YTX.prompts.VOCAB + '\n\n注意：以下词汇已经提取过，请排除它们，提取其他不同的词汇：\n' + excludeList;
+    var payload = YTX.getContentPayload();
 
     YTX.getSettings().then(function (settings) {
-      chrome.runtime.sendMessage({
+      chrome.runtime.sendMessage(Object.assign({
         type: 'GENERATE_VOCAB',
-        transcript: YTX.transcriptData.full,
         prompt: refreshPrompt,
         provider: settings.provider,
         activeKey: settings.activeKey,
         model: settings.model,
-      });
+      }, payload));
     });
   },
 };

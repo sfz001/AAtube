@@ -7,8 +7,8 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>YouTubeX</h1>
-      <span class="subtitle">YouTube 视频 AI 总结</span>
+      <h1>AATube</h1>
+      <span class="subtitle">YouTube 视频 AI 助手</span>
     </div>
 
     <div class="section">
@@ -43,6 +43,27 @@
         </div>
         <textarea id="prompt" rows="12" spellcheck="false"></textarea>
         <div class="hint">用 <code>{transcript}</code> 表示字幕内容插入位置</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">Notion 导出</div>
+
+      <div class="field">
+        <label for="notionToken">
+          <span>Integration Token</span>
+          <a href="https://www.notion.so/my-integrations" target="_blank" class="help-link">获取</a>
+        </label>
+        <div class="input-wrap">
+          <input type="password" id="notionToken" placeholder="ntn_...">
+          <button id="toggleNotionToken" class="btn-icon" title="显示/隐藏">👁</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="notionPageId">父级页面</label>
+        <input type="text" id="notionPageId" placeholder="页面链接或 32 位 ID">
+        <div class="hint">需将集成邀请（Connections）到目标页面</div>
       </div>
     </div>
 

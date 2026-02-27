@@ -175,7 +175,8 @@
     actionsHtml: function () {
       return '<button id="ytx-generate-mindmap" class="ytx-btn ytx-btn-primary">生成导图</button>' +
              '<button id="ytx-open-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">新标签打开</button>' +
-             '<button id="ytx-export-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">导出 SVG</button>';
+             '<button id="ytx-export-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">导出 SVG</button>' +
+             '<button id="ytx-export-notion-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">导出 Notion</button>';
     },
 
     contentHtml: function () {
@@ -187,6 +188,7 @@
       panel.querySelector('#ytx-generate-mindmap').addEventListener('click', function () { self.start(); });
       panel.querySelector('#ytx-open-mindmap').addEventListener('click', function () { self.openInNewTab(); });
       panel.querySelector('#ytx-export-mindmap').addEventListener('click', function () { self.exportSvg(); });
+      panel.querySelector('#ytx-export-notion-mindmap').addEventListener('click', function () { self.exportNotionMindmap(); });
     },
 
     start: async function () {
@@ -202,27 +204,27 @@
       var exportBtn = YTX.panel.querySelector('#ytx-export-mindmap');
       btn.disabled = true;
       exportBtn.style.display = 'none';
+      YTX.panel.querySelector('#ytx-open-mindmap').style.display = 'none';
+      YTX.panel.querySelector('#ytx-export-notion-mindmap').style.display = 'none';
 
       try {
-        if (!YTX.transcriptData) {
-          btn.textContent = '获取字幕中...';
-          contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div></div>';
-          YTX.transcriptData = await YTX.fetchTranscript();
-          YTX.renderTranscript();
-        }
+        btn.textContent = '获取字幕中...';
+        contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div></div>';
+        await YTX.ensureTranscript();
 
         btn.textContent = '生成中...';
         contentEl.innerHTML = '<div class="ytx-empty"><div class="ytx-loading"><div class="ytx-spinner"></div><span>正在生成思维导图...</span></div></div>';
 
         var settings = await YTX.getSettings();
-        chrome.runtime.sendMessage({
+        var payload = YTX.getContentPayload();
+
+        chrome.runtime.sendMessage(Object.assign({
           type: 'GENERATE_MINDMAP',
-          transcript: YTX.transcriptData.full,
           prompt: YTX.prompts.MINDMAP,
           provider: settings.provider,
           activeKey: settings.activeKey,
           model: settings.model,
-        });
+        }, payload));
       } catch (err) {
         contentEl.innerHTML = '<div class="ytx-error" style="margin:14px 16px">' + err.message + '</div>';
         btn.disabled = false;
@@ -237,21 +239,21 @@
 
     onDone: function () {
       try {
-        var jsonMatch = this.rawText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          this.data = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error('未找到有效的 JSON 数据');
+        this.data = YTX.extractJSON(this.rawText, 'object');
+        if (!this.data) {
+          throw new Error('AI 返回的内容不包含有效 JSON，请重新生成');
         }
         this.render();
         YTX.panel.querySelector('#ytx-open-mindmap').style.display = 'inline-block';
         YTX.panel.querySelector('#ytx-export-mindmap').style.display = 'inline-block';
+        YTX.panel.querySelector('#ytx-export-notion-mindmap').style.display = 'inline-block';
       } catch (err) {
-        YTX.panel.querySelector('#ytx-content-mindmap').innerHTML = '<div class="ytx-error" style="margin:14px 16px">导图解析失败: ' + err.message + '</div>';
+        YTX.panel.querySelector('#ytx-content-mindmap').innerHTML = '<div class="ytx-error" style="margin:14px 16px">导图解析失败: ' + err.message + '<br>可尝试点击「重新生成」</div>';
       }
       YTX.panel.querySelector('#ytx-generate-mindmap').disabled = false;
       YTX.panel.querySelector('#ytx-generate-mindmap').textContent = '重新生成';
       this.isGenerating = false;
+      if (this.data) YTX.cache.save(YTX.currentVideoId, 'mindmap', { data: this.data });
     },
 
     onError: function (error) {
@@ -419,13 +421,7 @@
     },
 
     getVideoTitle: function () {
-      var el = document.querySelector('yt-formatted-string.ytd-watch-metadata') ||
-               document.querySelector('h1.ytd-watch-metadata yt-formatted-string') ||
-               document.querySelector('#title h1 yt-formatted-string') ||
-               document.querySelector('h1.title');
-      var title = (el && el.textContent || '').trim();
-      // 清理文件名中不合法的字符
-      return title.replace(/[\\/:*?"<>|]/g, '_').substring(0, 80) || 'mindmap';
+      return YTX.Export.getSafeFilename(YTX.Export.getVideoTitle()) || 'mindmap';
     },
 
     buildExportSvg: function () {
@@ -468,6 +464,7 @@
       var blob = new Blob([html], { type: 'text/html' });
       var url = URL.createObjectURL(blob);
       window.open(url, '_blank');
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
     },
 
     exportSvg: function () {
@@ -483,6 +480,26 @@
       a.download = this.getVideoTitle() + '.svg';
       a.click();
       URL.revokeObjectURL(url);
+    },
+
+    exportNotionMindmap: function () {
+      if (!this.data) return;
+      var btn = YTX.panel.querySelector('#ytx-export-notion-mindmap');
+      btn.textContent = '导出中...';
+      btn.disabled = true;
+      var blocks = YTX.Export.mindmapToNotionBlocks(this.data);
+      var title = YTX.Export.getVideoTitle() + ' - 导图';
+      YTX.Export.sendToNotion(title, blocks, function (resp) {
+        if (resp.error) {
+          btn.textContent = '导出失败';
+          btn.disabled = false;
+          alert(resp.error);
+          setTimeout(function () { btn.textContent = '导出 Notion'; }, 1500);
+        } else {
+          YTX.Export.flashButton(btn, '已导出', 2000);
+          if (resp.url) window.open(resp.url, '_blank');
+        }
+      });
     },
   };
 })();
