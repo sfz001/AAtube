@@ -145,12 +145,19 @@
         '<div id="ytx-actions">' + actionsHtml + '</div>' +
       '</div>' +
       '<div id="ytx-tabs">' + tabsHtml + '</div>' +
+      '<div id="ytx-video-mode-banner" style="display:none">' +
+        '<span>当前使用 Gemini 视频模式分析</span>' +
+        '<button id="ytx-video-mode-close" title="关闭提示">\u00D7</button>' +
+      '</div>' +
       contentHtml +
       '<div id="ytx-transcript-section">' +
-        '<button id="ytx-transcript-toggle">' +
-          '<span>查看字幕</span>' +
-          '<span class="arrow">\u25BC</span>' +
-        '</button>' +
+        '<div id="ytx-transcript-header">' +
+          '<button id="ytx-transcript-toggle">' +
+            '<span>查看字幕</span>' +
+            '<span class="arrow">\u25BC</span>' +
+          '</button>' +
+          '<button id="ytx-use-video-mode" class="ytx-btn ytx-btn-video-mode">使用视频模式</button>' +
+        '</div>' +
         '<div id="ytx-transcript-body"></div>' +
       '</div>';
 
@@ -170,6 +177,26 @@
 
     // 绑定字幕折叠
     panel.querySelector('#ytx-transcript-toggle').addEventListener('click', toggleTranscript);
+
+    // 绑定视频模式提示条关闭
+    panel.querySelector('#ytx-video-mode-close').addEventListener('click', function () {
+      var banner = panel.querySelector('#ytx-video-mode-banner');
+      if (banner) banner.style.display = 'none';
+    });
+
+    // 绑定「使用视频模式」按钮
+    panel.querySelector('#ytx-use-video-mode').addEventListener('click', function () {
+      var btn = panel.querySelector('#ytx-use-video-mode');
+      if (btn) { btn.disabled = true; btn.textContent = '切换中...'; }
+      YTX.switchToVideoMode().then(function () {
+        // 切换成功后隐藏按钮
+        if (btn) btn.style.display = 'none';
+      }).catch(function (err) {
+        if (btn) { btn.disabled = false; btn.textContent = '使用视频模式'; }
+        var body = panel.querySelector('#ytx-transcript-body');
+        if (body) body.innerHTML = '<div class="ytx-error">' + (err.message || '视频模式切换失败') + '</div>';
+      });
+    });
 
     // 面板级时间戳点击委托
     setupTimestampClickHandler(panel);

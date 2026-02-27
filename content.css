@@ -599,16 +599,51 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
   filter: brightness(0.9);
 }
 
+/* 视频模式提示条 */
+#ytx-video-mode-banner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #ddd6fe;
+}
+#ytx-video-mode-banner span {
+  flex: 1;
+}
+#ytx-video-mode-close {
+  background: none;
+  border: none;
+  color: #6d28d9;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+#ytx-video-mode-close:hover {
+  opacity: 1;
+}
+
 /* 字幕区 */
 #ytx-transcript-section {
   border-top: 1px solid #f0f0f0;
+}
+
+#ytx-transcript-header {
+  display: flex;
+  align-items: center;
 }
 
 #ytx-transcript-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  flex: 1;
   padding: 10px 16px;
   background: none;
   border: none;
@@ -616,6 +651,27 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
   font-size: 13px;
   font-weight: 500;
   color: #6b7280;
+}
+
+.ytx-btn-video-mode {
+  margin-right: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+  border-radius: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.ytx-btn-video-mode:hover {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+}
+.ytx-btn-video-mode:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 #ytx-transcript-toggle:hover {
@@ -750,6 +806,23 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
 }
 [dark] .ytx-tab:hover {
   background: #2a2a2a;
+}
+[dark] #ytx-video-mode-banner {
+  background: #1e1346;
+  color: #c4b5fd;
+  border-bottom-color: #3b2d6e;
+}
+[dark] #ytx-video-mode-close {
+  color: #c4b5fd;
+}
+[dark] .ytx-btn-video-mode {
+  background: #1e1346;
+  color: #a78bfa;
+  border-color: #3b2d6e;
+}
+[dark] .ytx-btn-video-mode:hover {
+  background: #2d1b69;
+  border-color: #7c3aed;
 }
 [dark] #ytx-html-toolbar {
   border-color: #333;

@@ -124,6 +124,83 @@ YTX.getContentPayload = function () {
   return { transcript: YTX.transcriptData.full };
 };
 
+// ── 视频模式提示条 ──────────────────────────────────
+
+YTX.showVideoModeBanner = function () {
+  if (!YTX.panel) return;
+  var banner = YTX.panel.querySelector('#ytx-video-mode-banner');
+  if (banner) banner.style.display = 'flex';
+};
+
+// ── 通过 Gemini 分析视频（内部复用）───────────────────
+
+YTX._analyzeVideoWithGemini = async function () {
+  var geminiKey = await YTX.getGeminiKey();
+  if (!geminiKey) {
+    throw new Error('该视频无字幕。配置 Gemini API Key 后可直接分析视频内容');
+  }
+
+  YTX.videoMode = true;
+  YTX.showVideoModeBanner();
+
+  if (YTX.panel) {
+    var body = YTX.panel.querySelector('#ytx-transcript-body');
+    if (body) body.innerHTML = '<div class="ytx-warning" style="padding:8px 12px;font-size:12px;color:#7c3aed;background:#ede9fe;border-radius:6px">正在使用 Gemini 分析视频内容...</div>';
+  }
+
+  var videoUrl = YTX.getVideoUrl();
+  var result = await new Promise(function (resolve, reject) {
+    try {
+      chrome.runtime.sendMessage({
+        type: 'TRANSCRIBE_VIDEO',
+        videoUrl: videoUrl,
+        activeKey: geminiKey,
+      }, function (resp) {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message || '视频分析请求失败'));
+          return;
+        }
+        if (resp && resp.text) resolve(resp.text);
+        else reject(new Error((resp && resp.error) || '视频分析失败'));
+      });
+    } catch (e) {
+      reject(new Error('无法连接到扩展后台: ' + e.message));
+    }
+  });
+
+  YTX.transcriptData = { full: result };
+  YTX.renderTranscript();
+};
+
+// ── 手动切换到视频模式 ──────────────────────────────
+
+YTX.switchToVideoMode = async function () {
+  // 清空已有字幕数据
+  YTX.transcriptData = null;
+
+  // 重置所有功能模块的已生成内容
+  YTX.featureOrder.forEach(function (key) {
+    var f = YTX.features[key];
+    if (f && f.reset) f.reset();
+  });
+
+  // 重新渲染各模块的空状态
+  if (YTX.panel) {
+    YTX.featureOrder.forEach(function (key) {
+      var f = YTX.features[key];
+      var el = YTX.panel.querySelector('#' + f.contentId);
+      if (el) el.innerHTML = f.contentHtml();
+    });
+    // 重新绑定事件
+    YTX.featureOrder.forEach(function (key) {
+      var f = YTX.features[key];
+      if (f && f.bindEvents) f.bindEvents(YTX.panel);
+    });
+  }
+
+  await YTX._analyzeVideoWithGemini();
+};
+
 // ── 确保字幕已加载（各模块共用）───────────────────────
 
 YTX.ensureTranscript = async function () {
@@ -133,33 +210,7 @@ YTX.ensureTranscript = async function () {
     YTX.transcriptData = await YTX.fetchTranscript();
     YTX.renderTranscript(); // defined in panel.js
   } catch (err) {
-    // 字幕获取失败，检查是否有 Gemini Key 可用
-    var geminiKey = await YTX.getGeminiKey();
-    if (!geminiKey) {
-      throw new Error('该视频无字幕。配置 Gemini API Key 后可直接分析视频内容');
-    }
-
-    YTX.videoMode = true;
-    if (YTX.panel) {
-      var body = YTX.panel.querySelector('#ytx-transcript-body');
-      if (body) body.innerHTML = '<div class="ytx-warning" style="padding:8px 12px;font-size:12px;color:#7c3aed;background:#ede9fe;border-radius:6px">该视频无字幕，正在使用 Gemini 分析视频内容...</div>';
-    }
-
-    // 一次性让 Gemini 生成虚拟字幕，后续所有功能复用
-    var videoUrl = YTX.getVideoUrl();
-    var result = await new Promise(function (resolve, reject) {
-      chrome.runtime.sendMessage({
-        type: 'TRANSCRIBE_VIDEO',
-        videoUrl: videoUrl,
-        activeKey: geminiKey,
-      }, function (resp) {
-        if (resp && resp.text) resolve(resp.text);
-        else reject(new Error((resp && resp.error) || '视频分析失败'));
-      });
-    });
-
-    YTX.transcriptData = { full: result };
-    YTX.renderTranscript();
+    await YTX._analyzeVideoWithGemini();
   }
 };
 
