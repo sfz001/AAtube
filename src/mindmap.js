@@ -174,6 +174,7 @@
 
     actionsHtml: function () {
       return '<button id="ytx-generate-mindmap" class="ytx-btn ytx-btn-primary">生成导图</button>' +
+             '<button id="ytx-open-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">新标签打开</button>' +
              '<button id="ytx-export-mindmap" class="ytx-btn ytx-btn-secondary" style="display:none">导出 SVG</button>';
     },
 
@@ -184,6 +185,7 @@
     bindEvents: function (panel) {
       var self = this;
       panel.querySelector('#ytx-generate-mindmap').addEventListener('click', function () { self.start(); });
+      panel.querySelector('#ytx-open-mindmap').addEventListener('click', function () { self.openInNewTab(); });
       panel.querySelector('#ytx-export-mindmap').addEventListener('click', function () { self.exportSvg(); });
     },
 
@@ -242,6 +244,7 @@
           throw new Error('未找到有效的 JSON 数据');
         }
         this.render();
+        YTX.panel.querySelector('#ytx-open-mindmap').style.display = 'inline-block';
         YTX.panel.querySelector('#ytx-export-mindmap').style.display = 'inline-block';
       } catch (err) {
         YTX.panel.querySelector('#ytx-content-mindmap').innerHTML = '<div class="ytx-error" style="margin:14px 16px">导图解析失败: ' + err.message + '</div>';
@@ -415,10 +418,19 @@
       });
     },
 
-    exportSvg: function () {
-      if (!YTX.panel || !this.data) return;
+    getVideoTitle: function () {
+      var el = document.querySelector('yt-formatted-string.ytd-watch-metadata') ||
+               document.querySelector('h1.ytd-watch-metadata yt-formatted-string') ||
+               document.querySelector('#title h1 yt-formatted-string') ||
+               document.querySelector('h1.title');
+      var title = (el && el.textContent || '').trim();
+      // 清理文件名中不合法的字符
+      return title.replace(/[\\/:*?"<>|]/g, '_').substring(0, 80) || 'mindmap';
+    },
+
+    buildExportSvg: function () {
       var svgEl = YTX.panel.querySelector('.ytx-mindmap-svg');
-      if (!svgEl) return;
+      if (!svgEl) return null;
 
       var bounds = getMindmapBounds(this.data);
       var PAD = 40;
@@ -437,12 +449,38 @@
       bg.setAttribute('fill', '#fff');
       clone.insertBefore(bg, clone.firstChild);
 
-      var svgData = new XMLSerializer().serializeToString(clone);
+      return { svg: clone, width: exportW, height: exportH };
+    },
+
+    openInNewTab: function () {
+      if (!YTX.panel || !this.data) return;
+      var result = this.buildExportSvg();
+      if (!result) return;
+
+      var svgData = new XMLSerializer().serializeToString(result.svg);
+      var title = this.getVideoTitle();
+      var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + YTX.escapeHtml(title) + ' - 思维导图</title>' +
+        '<style>body{margin:0;background:#f5f3ff;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
+        '.wrap{background:#fff;border-radius:12px;box-shadow:0 2px 20px rgba(0,0,0,.08);padding:24px;margin:24px;max-width:100%;overflow:auto}' +
+        'h1{text-align:center;color:#7c3aed;font-size:18px;margin:0 0 16px}</style></head>' +
+        '<body><div class="wrap"><h1>' + YTX.escapeHtml(title) + '</h1>' + svgData + '</div></body></html>';
+
+      var blob = new Blob([html], { type: 'text/html' });
+      var url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    },
+
+    exportSvg: function () {
+      if (!YTX.panel || !this.data) return;
+      var result = this.buildExportSvg();
+      if (!result) return;
+
+      var svgData = new XMLSerializer().serializeToString(result.svg);
       var blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'mindmap-' + (YTX.currentVideoId || 'video') + '.svg';
+      a.download = this.getVideoTitle() + '.svg';
       a.click();
       URL.revokeObjectURL(url);
     },
