@@ -26,7 +26,7 @@ const DEFAULT_PROMPT = `请对以下 YouTube 视频字幕内容进行总结。
 const PROVIDERS = {
   claude: {
     label: 'Claude API Key',
-    keyField: 'apiKey',
+    keyField: 'claudeKey',
     placeholder: 'sk-ant-api03-...',
     helpUrl: 'https://console.anthropic.com/settings/keys',
     models: [
@@ -63,7 +63,7 @@ const $ = (sel) => document.querySelector(sel);
 
 let currentProvider = 'claude';
 // Cache keys and model selection per provider so switching tabs doesn't lose unsaved input
-let keyCache = { apiKey: '', openaiKey: '', geminiKey: '' };
+let keyCache = { claudeKey: '', openaiKey: '', geminiKey: '' };
 let modelCache = { claude: '', openai: '', gemini: '' };
 
 function parseNotionPageId(input) {
@@ -79,8 +79,8 @@ function parseNotionPageId(input) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.sync.get(['provider', 'apiKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt', 'notionToken', 'notionPageId', 'githubToken'], (data) => {
-    keyCache.apiKey = data.apiKey || '';
+  chrome.storage.sync.get(['provider', 'claudeKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt', 'notionKey', 'notionPage', 'githubKey'], (data) => {
+    keyCache.claudeKey = data.claudeKey || '';
     keyCache.openaiKey = data.openaiKey || '';
     keyCache.geminiKey = data.geminiKey || '';
 
@@ -99,11 +99,11 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#prompt').value = data.prompt || DEFAULT_PROMPT;
 
     // Notion settings
-    $('#notionToken').value = data.notionToken || '';
-    $('#notionPageId').value = data.notionPageId || '';
+    $('#notionKey').value = data.notionKey || '';
+    $('#notionPage').value = data.notionPage || '';
 
     // GitHub Gist
-    $('#githubToken').value = data.githubToken || '';
+    $('#githubKey').value = data.githubKey || '';
   });
 
   // Provider tab clicks
@@ -128,14 +128,58 @@ document.addEventListener('DOMContentLoaded', () => {
     input.type = input.type === 'password' ? 'text' : 'password';
   });
 
-  $('#toggleNotionToken').addEventListener('click', () => {
-    const input = $('#notionToken');
+  $('#toggleNotionKey').addEventListener('click', () => {
+    const input = $('#notionKey');
     input.type = input.type === 'password' ? 'text' : 'password';
   });
 
-  $('#toggleGithubToken').addEventListener('click', () => {
-    const input = $('#githubToken');
+  $('#toggleGithubKey').addEventListener('click', () => {
+    const input = $('#githubKey');
     input.type = input.type === 'password' ? 'text' : 'password';
+  });
+
+  const SETTING_KEYS = ['provider', 'claudeKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'prompt', 'notionKey', 'notionPage', 'githubKey'];
+
+  $('#exportSettings').addEventListener('click', () => {
+    chrome.storage.sync.get(SETTING_KEYS, (data) => {
+      data._meta = { exportedAt: new Date().toISOString(), version: 'AATube' };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'aatube-settings.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showStatus('设置已导出', 'success');
+    });
+  });
+
+  $('#importSettings').addEventListener('click', () => {
+    $('#importFile').value = '';
+    $('#importFile').click();
+  });
+
+  $('#importFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!data._meta || data._meta.version !== 'AATube') {
+          showStatus('无效的设置文件', 'error');
+          return;
+        }
+        const filtered = {};
+        SETTING_KEYS.forEach(k => { if (k in data) filtered[k] = data[k]; });
+        chrome.storage.sync.set(filtered, () => {
+          showStatus('设置已导入，正在刷新…', 'success');
+          setTimeout(() => location.reload(), 600);
+        });
+      } catch {
+        showStatus('文件解析失败', 'error');
+      }
+    };
+    reader.readAsText(file);
   });
 
   $('#save').addEventListener('click', () => {
@@ -159,26 +203,26 @@ document.addEventListener('DOMContentLoaded', () => {
     modelCache[currentProvider] = model;
 
     // Notion settings
-    const notionToken = $('#notionToken').value.trim();
-    const notionPageId = parseNotionPageId($('#notionPageId').value);
+    const notionKey = $('#notionKey').value.trim();
+    const notionPage = parseNotionPageId($('#notionPage').value);
 
     // GitHub Gist
-    const githubToken = $('#githubToken').value.trim();
+    const githubKey = $('#githubKey').value.trim();
 
     // Save all keys + per-provider models, remove legacy global 'model' field
     chrome.storage.sync.remove('model');
     chrome.storage.sync.set({
       provider: currentProvider,
-      apiKey: keyCache.apiKey,
+      claudeKey: keyCache.claudeKey,
       openaiKey: keyCache.openaiKey,
       geminiKey: keyCache.geminiKey,
       claudeModel: modelCache.claude,
       openaiModel: modelCache.openai,
       geminiModel: modelCache.gemini,
       prompt,
-      notionToken,
-      notionPageId,
-      githubToken,
+      notionKey,
+      notionPage,
+      githubKey,
     }, () => {
       showStatus('设置已保存 ✓', 'success');
     });

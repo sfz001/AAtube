@@ -5,8 +5,8 @@ YTX.Export = {
   // ── 读取 Notion 设置 ─────────────────────────────────
   getNotionSettings: function () {
     return new Promise(function (resolve) {
-      chrome.storage.sync.get(['notionToken', 'notionPageId'], function (data) {
-        resolve({ token: data.notionToken || '', pageId: data.notionPageId || '' });
+      chrome.storage.sync.get(['notionKey', 'notionPage'], function (data) {
+        resolve({ token: data.notionKey || '', pageId: data.notionPage || '' });
       });
     });
   },
@@ -85,17 +85,18 @@ YTX.Export = {
   },
 
   // ── 导图 JSON → Markdown（缩进 bullet list）──────────
-  mindmapToMarkdown: function (node, depth) {
+  mindmapToMarkdown: function (node, depth, opts) {
     depth = depth || 0;
+    opts = opts || {};
     var indent = '';
     for (var i = 0; i < depth; i++) indent += '  ';
     var prefix = depth === 0 ? '# ' : indent + '- ';
-    var timePart = node.time ? ' [' + node.time + ']' : '';
+    var timePart = (!opts.noTime && node.time) ? ' [' + node.time + ']' : '';
     var line = prefix + (node.label || '') + timePart + '\n';
 
     if (node.children && node.children.length > 0) {
       var childLines = node.children.map(function (child) {
-        return YTX.Export.mindmapToMarkdown(child, depth + 1);
+        return YTX.Export.mindmapToMarkdown(child, depth + 1, opts);
       }).join('');
       return line + childLines;
     }
@@ -149,7 +150,8 @@ YTX.Export = {
       return result;
     }
 
-    function parseListItems(ul, type) {
+    function parseListItems(ul, type, depth) {
+      depth = depth || 0;
       var items = [];
       Array.from(ul.children).forEach(function (li) {
         if (li.tagName !== 'LI') return;
@@ -162,7 +164,21 @@ YTX.Export = {
           } else if (child.nodeType === 1) {
             var ct = child.tagName.toLowerCase();
             if (ct === 'ul' || ct === 'ol') {
-              nestedBlocks = nestedBlocks.concat(parseListItems(child, ct === 'ol' ? 'numbered_list_item' : 'bulleted_list_item'));
+              var childType = ct === 'ol' ? 'numbered_list_item' : 'bulleted_list_item';
+              if (depth < 1) {
+                // Notion 最多 2 层嵌套，depth 0→1 可以嵌套
+                nestedBlocks = nestedBlocks.concat(parseListItems(child, childType, depth + 1));
+              } else {
+                // 超过 2 层：展平，用缩进前缀 "└ " 表示层级
+                var flat = parseListItems(child, childType, depth + 1);
+                flat.forEach(function (fb) {
+                  var prefix = '└ ';
+                  var rt = fb[fb.type].rich_text;
+                  if (rt.length > 0) rt[0].text.content = prefix + rt[0].text.content;
+                  else rt.push({ type: 'text', text: { content: prefix } });
+                  nestedBlocks.push(fb);
+                });
+              }
             } else {
               richText = richText.concat(parseRichText(child));
             }
@@ -171,7 +187,14 @@ YTX.Export = {
         if (richText.length === 0) richText.push({ type: 'text', text: { content: ' ' } });
         var block = { type: type };
         block[type] = { rich_text: richText };
-        if (nestedBlocks.length > 0) block[type].children = nestedBlocks;
+        if (nestedBlocks.length > 0 && depth < 1) {
+          block[type].children = nestedBlocks;
+        } else if (nestedBlocks.length > 0) {
+          // depth >= 1: 不能再嵌套，追加为同级
+          items.push(block);
+          items = items.concat(nestedBlocks);
+          return;
+        }
         items.push(block);
       });
       return items;
@@ -247,7 +270,8 @@ YTX.Export = {
       }
     });
 
-    function buildChildren(children) {
+    function buildChildren(children, depth) {
+      depth = depth || 0;
       var items = [];
       if (!children) return items;
       children.forEach(function (child) {
@@ -260,7 +284,19 @@ YTX.Export = {
           }
         };
         if (child.children && child.children.length > 0) {
-          block.bulleted_list_item.children = buildChildren(child.children);
+          if (depth < 1) {
+            // Notion 最多 2 层嵌套
+            block.bulleted_list_item.children = buildChildren(child.children, depth + 1);
+          } else {
+            // 超过 2 层：展平为同级，加前缀标识层级
+            items.push(block);
+            var flat = buildChildren(child.children, depth + 1);
+            flat.forEach(function (fb) {
+              fb.bulleted_list_item.rich_text[0].text.content = '└ ' + fb.bulleted_list_item.rich_text[0].text.content;
+            });
+            items = items.concat(flat);
+            return;
+          }
         }
         items.push(block);
       });
@@ -334,8 +370,8 @@ YTX.Export = {
 
   getGithubToken: function () {
     return new Promise(function (resolve) {
-      chrome.storage.sync.get(['githubToken'], function (data) {
-        resolve(data.githubToken || '');
+      chrome.storage.sync.get(['githubKey'], function (data) {
+        resolve(data.githubKey || '');
       });
     });
   },
@@ -380,6 +416,26 @@ YTX.Export = {
       }
       YTX.Export.sendToNotion(title, blocks, callback);
     });
+  },
+
+  // ── Obsidian 导出（带 YAML frontmatter 的 .md 下载）────
+  downloadObsidian: function (md, title) {
+    var url = YTX.getVideoUrl();
+    var date = new Date().toISOString().slice(0, 10);
+    var frontmatter = '---\n' +
+      'title: "' + title.replace(/"/g, '\\"') + '"\n' +
+      'source: ' + url + '\n' +
+      'date: ' + date + '\n' +
+      'tags:\n  - youtube\n  - aatube\n' +
+      '---\n\n';
+    var content = frontmatter + md;
+    var filename = this.getSafeFilename(title) + '.md';
+    var blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
   },
 
   // ── 飞书预留 ─────────────────────────────────────────

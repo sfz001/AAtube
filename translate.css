@@ -1,0 +1,601 @@
+/* translate.css — 划词翻译 UI 样式（仿 NextAI Translator 风格） */
+
+/* ── 翻译触发图标 ─────────────────────────────────────── */
+#ytx-translate-icon {
+  position: fixed;
+  z-index: 2147483647;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: #7c3aed;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.35);
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+#ytx-translate-icon:hover {
+  background: #6d28d9;
+  transform: scale(1.1);
+  box-shadow: 0 3px 12px rgba(124, 58, 237, 0.45);
+}
+#ytx-translate-icon.ytx-translate-loading {
+  pointer-events: none;
+}
+#ytx-translate-icon .ytx-translate-spinner {
+  width: 16px;
+  height: 16px;
+}
+@keyframes ytx-translate-spin {
+  to { transform: rotate(360deg); }
+}
+#ytx-translate-icon .ytx-translate-spinner {
+  animation: ytx-translate-spin 0.8s linear infinite;
+}
+
+/* ── 翻译弹窗 ─────────────────────────────────────────── */
+#ytx-translate-popup {
+  position: fixed;
+  z-index: 2147483646;
+  display: none;
+  width: 520px;
+  min-width: 320px;
+  min-height: 200px;
+  border-radius: 12px;
+  background: #fff;
+  color: #1a1a1a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  flex-direction: column;
+  resize: both;
+}
+
+/* 头部栏（可拖拽） */
+.ytx-translate-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+  gap: 6px;
+  flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ytx-translate-header:active,
+#ytx-translate-popup.ytx-translate-dragging .ytx-translate-header {
+  cursor: grabbing;
+}
+.ytx-translate-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #7c3aed;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.ytx-translate-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  flex: 1;
+}
+/* 固定按钮 + 关闭按钮共用基础样式 */
+.ytx-translate-pin,
+.ytx-translate-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.ytx-translate-pin:hover,
+.ytx-translate-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+.ytx-translate-pin svg,
+.ytx-translate-close svg {
+  width: 14px;
+  height: 14px;
+}
+.ytx-translate-pin-active {
+  color: #7c3aed;
+}
+.ytx-translate-pin-active:hover {
+  color: #6d28d9;
+}
+
+/* 内容滚动区 */
+.ytx-translate-content {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+.ytx-translate-content::-webkit-scrollbar {
+  width: 4px;
+}
+.ytx-translate-content::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 2px;
+}
+
+/* 原文区域 */
+.ytx-translate-source {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ytx-translate-source-textarea {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  max-height: 150px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8f8f8;
+  border: 1px solid #eee;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #333;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.ytx-translate-source-textarea:focus {
+  border-color: #c4b5fd;
+}
+.ytx-translate-source-textarea::-webkit-scrollbar {
+  width: 3px;
+}
+.ytx-translate-source-textarea::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 2px;
+}
+
+/* 原文工具栏 */
+.ytx-translate-source-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* 目标语言选择 */
+.ytx-translate-lang-select {
+  margin-left: auto;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+.ytx-translate-lang-select:hover {
+  border-color: #c4b5fd;
+}
+.ytx-translate-lang-select:focus {
+  border-color: #7c3aed;
+}
+
+/* 翻译按钮 */
+.ytx-translate-submit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 6px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ytx-translate-submit:hover {
+  background: #6d28d9;
+}
+.ytx-translate-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.ytx-translate-submit svg {
+  width: 14px;
+  height: 14px;
+}
+.ytx-translate-submit .ytx-translate-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+/* 分隔指示 */
+.ytx-translate-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ytx-translate-status {
+  font-size: 12px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ytx-translate-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7c3aed;
+  flex-shrink: 0;
+}
+.ytx-translate-status.done .ytx-translate-status-dot {
+  background: #22c55e;
+}
+
+/* 译文区域 */
+.ytx-translate-result {
+  padding: 12px 14px;
+}
+.ytx-translate-result-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1a1a1a;
+  word-wrap: break-word;
+  white-space: normal;
+  min-height: 20px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.ytx-translate-result-text div {
+  margin: 1px 0;
+}
+
+/* 译文工具栏 */
+.ytx-translate-result-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+/* 通用工具按钮 */
+.ytx-translate-action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.ytx-translate-action-btn:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+.ytx-translate-action-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.ytx-translate-action-btn.ytx-copied {
+  color: #22c55e;
+}
+
+/* 底部栏 */
+.ytx-translate-footer {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-top: 1px solid #f0f0f0;
+  background: #fafafa;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ytx-translate-footer-text {
+  font-size: 11px;
+  color: #aaa;
+  flex: 1;
+}
+
+/* 光标闪烁 */
+@keyframes ytx-translate-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.ytx-translate-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 15px;
+  background: #7c3aed;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: ytx-translate-blink 0.8s step-end infinite;
+}
+
+/* 字典模式 markdown 样式 */
+.ytx-translate-result-text strong {
+  font-weight: 700;
+}
+.ytx-translate-result-text em {
+  font-style: italic;
+}
+.ytx-translate-result-text code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #f3f0ff;
+  color: #6d28d9;
+  font-size: 13px;
+  font-family: Menlo, Monaco, Consolas, monospace;
+}
+
+/* 词典各行样式 */
+.ytx-dict-head {
+  margin-bottom: 6px;
+}
+.ytx-dict-head strong {
+  font-size: 15px;
+}
+.ytx-dict-phonetic {
+  color: #888;
+  font-size: 13px;
+}
+.ytx-dict-def {
+  margin: 4px 0;
+  padding-left: 2px;
+}
+.ytx-dict-pos {
+  color: #7c3aed;
+  font-weight: 600;
+  margin-right: 2px;
+}
+.ytx-dict-ctx {
+  margin: 6px 0;
+  padding: 6px 10px;
+  background: #f8f5ff;
+  border-radius: 6px;
+  border-left: 3px solid #7c3aed;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ytx-dict-ex {
+  margin: 4px 0;
+  padding-left: 2px;
+  font-size: 13px;
+  color: #555;
+}
+.ytx-dict-label {
+  color: #999;
+  margin-right: 2px;
+}
+
+/* 错误状态 */
+.ytx-translate-result-text.ytx-translate-error {
+  color: #ef4444;
+}
+
+/* ── 暗色模式 ─────────────────────────────────────────── */
+html[dark] #ytx-translate-popup,
+[dark] #ytx-translate-popup {
+  background: #1e1e1e;
+  color: #e5e5e5;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+html[dark] .ytx-translate-header,
+[dark] .ytx-translate-header {
+  background: #252525;
+  border-bottom-color: #333;
+}
+html[dark] .ytx-translate-title,
+[dark] .ytx-translate-title {
+  color: #e5e5e5;
+}
+html[dark] .ytx-translate-pin,
+[dark] .ytx-translate-pin,
+html[dark] .ytx-translate-close,
+[dark] .ytx-translate-close {
+  color: #777;
+}
+html[dark] .ytx-translate-pin:hover,
+[dark] .ytx-translate-pin:hover,
+html[dark] .ytx-translate-close:hover,
+[dark] .ytx-translate-close:hover {
+  background: #333;
+  color: #e5e5e5;
+}
+html[dark] .ytx-translate-pin-active,
+[dark] .ytx-translate-pin-active {
+  color: #a78bfa;
+}
+html[dark] .ytx-translate-lang-select,
+[dark] .ytx-translate-lang-select {
+  background: #2a2a2a;
+  border-color: #383838;
+  color: #ddd;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23777' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+html[dark] .ytx-translate-lang-select:hover,
+[dark] .ytx-translate-lang-select:hover {
+  border-color: #555;
+}
+html[dark] .ytx-translate-lang-select:focus,
+[dark] .ytx-translate-lang-select:focus {
+  border-color: #7c3aed;
+}
+html[dark] .ytx-translate-source,
+[dark] .ytx-translate-source {
+  border-bottom-color: #333;
+}
+html[dark] .ytx-translate-source-textarea,
+[dark] .ytx-translate-source-textarea {
+  background: #2a2a2a;
+  border-color: #383838;
+  color: #ddd;
+}
+html[dark] .ytx-translate-source-textarea:focus,
+[dark] .ytx-translate-source-textarea:focus {
+  border-color: #7c3aed;
+}
+html[dark] .ytx-translate-source-textarea::-webkit-scrollbar-thumb,
+[dark] .ytx-translate-source-textarea::-webkit-scrollbar-thumb {
+  background: #555;
+}
+html[dark] .ytx-translate-divider,
+[dark] .ytx-translate-divider {
+  border-bottom-color: #333;
+}
+html[dark] .ytx-translate-result-text,
+[dark] .ytx-translate-result-text {
+  color: #e5e5e5;
+}
+html[dark] .ytx-translate-result-text code,
+[dark] .ytx-translate-result-text code {
+  background: #2d1b69;
+  color: #c4b5fd;
+}
+html[dark] .ytx-dict-phonetic,
+[dark] .ytx-dict-phonetic { color: #777; }
+html[dark] .ytx-dict-pos,
+[dark] .ytx-dict-pos { color: #a78bfa; }
+html[dark] .ytx-dict-ctx,
+[dark] .ytx-dict-ctx {
+  background: #2a2040;
+  border-left-color: #7c3aed;
+  color: #ddd;
+}
+html[dark] .ytx-dict-ex,
+[dark] .ytx-dict-ex { color: #aaa; }
+html[dark] .ytx-dict-label,
+[dark] .ytx-dict-label { color: #777; }
+html[dark] .ytx-translate-action-btn,
+[dark] .ytx-translate-action-btn {
+  color: #777;
+}
+html[dark] .ytx-translate-action-btn:hover,
+[dark] .ytx-translate-action-btn:hover {
+  background: #333;
+  color: #e5e5e5;
+}
+html[dark] .ytx-translate-submit,
+[dark] .ytx-translate-submit {
+  background: #6d28d9;
+}
+html[dark] .ytx-translate-submit:hover,
+[dark] .ytx-translate-submit:hover {
+  background: #5b21b6;
+}
+html[dark] .ytx-translate-footer,
+[dark] .ytx-translate-footer {
+  background: #252525;
+  border-top-color: #333;
+}
+html[dark] .ytx-translate-footer-text,
+[dark] .ytx-translate-footer-text {
+  color: #666;
+}
+html[dark] .ytx-translate-cursor,
+[dark] .ytx-translate-cursor {
+  background: #a78bfa;
+}
+html[dark] .ytx-translate-content::-webkit-scrollbar-thumb,
+[dark] .ytx-translate-content::-webkit-scrollbar-thumb {
+  background: #555;
+}
+html[dark] #ytx-translate-icon,
+[dark] #ytx-translate-icon {
+  background: #6d28d9;
+  box-shadow: 0 2px 8px rgba(109, 40, 217, 0.5);
+}
+html[dark] #ytx-translate-icon:hover,
+[dark] #ytx-translate-icon:hover {
+  background: #5b21b6;
+}
+
+/* ── 系统暗色模式（非 YouTube 页面）──────────────────── */
+@media (prefers-color-scheme: dark) {
+  #ytx-translate-popup {
+    background: #1e1e1e;
+    color: #e5e5e5;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+  .ytx-translate-header { background: #252525; border-bottom-color: #333; }
+  .ytx-translate-title { color: #e5e5e5; }
+  .ytx-translate-pin, .ytx-translate-close { color: #777; }
+  .ytx-translate-pin:hover, .ytx-translate-close:hover { background: #333; color: #e5e5e5; }
+  .ytx-translate-pin-active { color: #a78bfa; }
+  .ytx-translate-lang-select { background: #2a2a2a; border-color: #383838; color: #ddd; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23777' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+  .ytx-translate-lang-select:hover { border-color: #555; }
+  .ytx-translate-lang-select:focus { border-color: #7c3aed; }
+  .ytx-translate-source { border-bottom-color: #333; }
+  .ytx-translate-source-textarea { background: #2a2a2a; border-color: #383838; color: #ddd; }
+  .ytx-translate-source-textarea:focus { border-color: #7c3aed; }
+  .ytx-translate-source-textarea::-webkit-scrollbar-thumb { background: #555; }
+  .ytx-translate-divider { border-bottom-color: #333; }
+  .ytx-translate-result-text { color: #e5e5e5; }
+  .ytx-translate-result-text code { background: #2d1b69; color: #c4b5fd; }
+  .ytx-dict-phonetic { color: #777; }
+  .ytx-dict-pos { color: #a78bfa; }
+  .ytx-dict-ctx { background: #2a2040; border-left-color: #7c3aed; color: #ddd; }
+  .ytx-dict-ex { color: #aaa; }
+  .ytx-dict-label { color: #777; }
+  .ytx-translate-action-btn { color: #777; }
+  .ytx-translate-action-btn:hover { background: #333; color: #e5e5e5; }
+  .ytx-translate-submit { background: #6d28d9; }
+  .ytx-translate-submit:hover { background: #5b21b6; }
+  .ytx-translate-footer { background: #252525; border-top-color: #333; }
+  .ytx-translate-footer-text { color: #666; }
+  .ytx-translate-cursor { background: #a78bfa; }
+  .ytx-translate-content::-webkit-scrollbar-thumb { background: #555; }
+  #ytx-translate-icon { background: #6d28d9; box-shadow: 0 2px 8px rgba(109, 40, 217, 0.5); }
+  #ytx-translate-icon:hover { background: #5b21b6; }
+}

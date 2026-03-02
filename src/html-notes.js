@@ -21,7 +21,7 @@ YTX.features.html = {
   },
 
   contentHtml: function () {
-    return '<div class="ytx-empty">点击「生成笔记」将视频内容生成精美 HTML 页面</div>';
+    return '<div class="ytx-empty">点击「生成笔记」将视频内容生成 HTML 笔记</div>';
   },
 
   bindEvents: function (panel) {
@@ -43,7 +43,8 @@ YTX.features.html = {
       contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在获取字幕...</span></div>';
       await YTX.ensureTranscript();
 
-      contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在生成精美笔记...</span></div>';
+      btn.innerHTML = YTX.icons.spinner;
+      contentEl.innerHTML = '<div class="ytx-loading" style="padding:14px 16px"><div class="ytx-spinner"></div><span>正在生成笔记...</span></div>';
 
       var settings = await YTX.getSettings();
       var payload = YTX.getContentPayload();
@@ -92,6 +93,7 @@ YTX.features.html = {
         '<span class="ytx-mm-toolbar-spacer"></span>' +
         '<button class="ytx-mm-tool-btn" data-action="open-tab">新标签打开</button>' +
         '<button class="ytx-mm-tool-btn" data-action="download">下载 HTML</button>' +
+        '<button class="ytx-mm-tool-btn" data-action="export-obsidian">导出 Obsidian</button>' +
         '<button class="ytx-mm-tool-btn" data-action="export-notion">导出到Notion</button>' +
       '</div>';
     var iframe = document.createElement('iframe');
@@ -137,6 +139,7 @@ YTX.features.html = {
         var action = btn.dataset.action;
         if (action === 'open-tab') self.openInNewTab();
         else if (action === 'download') self.downloadHtml();
+        else if (action === 'export-obsidian') self.exportObsidian();
         else if (action === 'export-notion') self.exportNotion();
       });
     });
@@ -161,6 +164,14 @@ YTX.features.html = {
     URL.revokeObjectURL(url);
     var btn = YTX.panel.querySelector('#ytx-content-html .ytx-mm-tool-btn[data-action="download"]');
     if (btn) YTX.Export.flashButton(btn, '已下载', 1500);
+  },
+
+  exportObsidian: function () {
+    var title = YTX.Export.getVideoTitle() + ' - 笔记';
+    var md = YTX.Export.htmlToMarkdown(this.text);
+    YTX.Export.downloadObsidian(md, title);
+    var btn = YTX.panel.querySelector('#ytx-content-html .ytx-mm-tool-btn[data-action="export-obsidian"]');
+    if (btn) YTX.Export.flashButton(btn, '已导出', 1500);
   },
 
   exportNotion: function () {

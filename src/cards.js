@@ -104,16 +104,12 @@ YTX.features.cards = {
           return '<div class="ytx-card" data-index="' + i + '">' +
             '<div class="ytx-card-inner">' +
               '<div class="ytx-card-front">' +
-                '<div class="ytx-card-label">问题</div>' +
+                '<div class="ytx-card-label">问题' + (card.time ? ' <span class="ytx-timestamp ytx-card-time" data-time="' + YTX.timeToSeconds(card.time) + '">[' + card.time + ']</span>' : '') + '</div>' +
                 '<div class="ytx-card-text">' + YTX.escapeHtml(card.front) + '</div>' +
-                (card.time ? '<span class="ytx-timestamp ytx-card-time" data-time="' + YTX.timeToSeconds(card.time) + '">[' + card.time + ']</span>' : '') +
-                '<div class="ytx-card-hint">点击翻转查看答案</div>' +
               '</div>' +
               '<div class="ytx-card-back">' +
-                '<div class="ytx-card-label">答案</div>' +
+                '<div class="ytx-card-label">答案' + (card.time ? ' <span class="ytx-timestamp ytx-card-time" data-time="' + YTX.timeToSeconds(card.time) + '">[' + card.time + ']</span>' : '') + '</div>' +
                 '<div class="ytx-card-text">' + YTX.escapeHtml(card.back) + '</div>' +
-                (card.time ? '<span class="ytx-timestamp ytx-card-time" data-time="' + YTX.timeToSeconds(card.time) + '">[' + card.time + ']</span>' : '') +
-                '<div class="ytx-card-hint">点击翻转回正面</div>' +
               '</div>' +
             '</div>' +
           '</div>';

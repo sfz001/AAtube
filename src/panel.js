@@ -63,8 +63,7 @@
       if (record.summary && record.summary.text) {
         var s = YTX.features.summary;
         s.text = record.summary.text;
-        var el = YTX.panel.querySelector('#ytx-content');
-        if (el) el.innerHTML = YTX.renderMarkdown(s.text);
+        s.renderFinal();
         YTX.btnRefresh(YTX.panel.querySelector('#ytx-summarize'));
       }
 

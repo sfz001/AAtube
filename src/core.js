@@ -14,7 +14,7 @@ var YTX = {
   features: {},
 
   // 功能模块加载顺序（panel.js 中用于遍历）
-  featureOrder: ['summary', 'html', 'chat', 'cards', 'mindmap', 'vocab'],
+  featureOrder: ['summary', 'mindmap', 'html', 'cards', 'vocab', 'chat'],
 };
 
 // ── 按钮图标 ─────────────────────────────────────────
@@ -61,10 +61,10 @@ YTX.timeToSeconds = function (str) {
 YTX.getSettings = function () {
   return new Promise(function (resolve) {
     chrome.storage.sync.get(
-      ['provider', 'apiKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt'],
+      ['provider', 'claudeKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'model', 'prompt'],
       function (data) {
         var provider = data.provider || 'claude';
-        var KEY_MAP = { claude: 'apiKey', openai: 'openaiKey', gemini: 'geminiKey' };
+        var KEY_MAP = { claude: 'claudeKey', openai: 'openaiKey', gemini: 'geminiKey' };
         var MODEL_MAP = { claude: 'claudeModel', openai: 'openaiModel', gemini: 'geminiModel' };
         resolve({
           provider: provider,

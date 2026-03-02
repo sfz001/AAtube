@@ -91,15 +91,47 @@ YTX.features.summary = {
   onDone: function () {
     // 清除节流计时器，立即渲染最终结果
     if (this._renderTimer) { clearTimeout(this._renderTimer); this._renderTimer = null; }
-    var contentEl = YTX.panel.querySelector('#ytx-content');
-    var scrollTop = contentEl.scrollTop;
-    contentEl.innerHTML = YTX.renderMarkdown(this.text);
-    contentEl.scrollTop = scrollTop;
+    this.renderFinal();
 
     YTX.panel.querySelector('#ytx-summarize').disabled = false;
     YTX.btnRefresh(YTX.panel.querySelector('#ytx-summarize'));
     this.isGenerating = false;
     YTX.cache.save(YTX.currentVideoId, 'summary', { text: this.text });
+  },
+
+  renderFinal: function () {
+    var self = this;
+    var contentEl = YTX.panel.querySelector('#ytx-content');
+    var scrollTop = contentEl.scrollTop;
+    contentEl.innerHTML =
+      '<div class="ytx-summary-toolbar">' +
+        '<span class="ytx-mm-toolbar-spacer"></span>' +
+        '<button class="ytx-mm-tool-btn" data-action="download-md">下载 MD</button>' +
+        '<button class="ytx-mm-tool-btn" data-action="export-obsidian">导出 Obsidian</button>' +
+      '</div>' +
+      YTX.renderMarkdown(self.text);
+    contentEl.scrollTop = scrollTop;
+    contentEl.querySelectorAll('.ytx-mm-tool-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var action = btn.dataset.action;
+        if (action === 'download-md') self.downloadMd();
+        else if (action === 'export-obsidian') self.exportObsidian();
+      });
+    });
+  },
+
+  downloadMd: function () {
+    var title = YTX.Export.getVideoTitle() + ' - 总结';
+    YTX.Export.downloadMarkdown(this.text, YTX.Export.getSafeFilename(title));
+    var btn = YTX.panel.querySelector('#ytx-content .ytx-mm-tool-btn[data-action="download-md"]');
+    if (btn) YTX.Export.flashButton(btn, '已下载', 1500);
+  },
+
+  exportObsidian: function () {
+    var title = YTX.Export.getVideoTitle() + ' - 总结';
+    YTX.Export.downloadObsidian(this.text, title);
+    var btn = YTX.panel.querySelector('#ytx-content .ytx-mm-tool-btn[data-action="export-obsidian"]');
+    if (btn) YTX.Export.flashButton(btn, '已导出', 1500);
   },
 
   onError: function (error) {

@@ -281,6 +281,7 @@
           '<span class="ytx-mm-toolbar-spacer"></span>' +
           '<button class="ytx-mm-tool-btn" data-action="open-tab">新标签打开</button>' +
           '<button class="ytx-mm-tool-btn" data-action="export-svg">导出 SVG</button>' +
+          '<button class="ytx-mm-tool-btn" data-action="export-obsidian">导出 Obsidian</button>' +
           '<button class="ytx-mm-tool-btn" data-action="export-notion">导出到Notion</button>' +
         '</div>' +
         '<div class="ytx-mindmap-viewport">' +
@@ -403,6 +404,7 @@
           var action = btn.dataset.action;
           if (action === 'open-tab') self.openInNewTab();
           else if (action === 'export-svg') self.exportSvg();
+          else if (action === 'export-obsidian') self.exportObsidian();
           else if (action === 'export-notion') self.exportNotionMindmap();
         });
       });
@@ -481,6 +483,15 @@
       var url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    },
+
+    exportObsidian: function () {
+      if (!this.data) return;
+      var title = YTX.Export.getVideoTitle() + ' - 导图';
+      var md = YTX.Export.mindmapToMarkdown(this.data, 0, { noTime: true });
+      YTX.Export.downloadObsidian(md, title);
+      var btn = YTX.panel.querySelector('.ytx-mm-tool-btn[data-action="export-obsidian"]');
+      if (btn) YTX.Export.flashButton(btn, '已导出', 1500);
     },
 
     exportSvg: function () {
