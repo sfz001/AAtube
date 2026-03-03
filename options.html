@@ -75,6 +75,9 @@
         <button class="prompt-tab" data-prompt="cards">知识卡片</button>
         <button class="prompt-tab" data-prompt="mindmap">思维导图</button>
         <button class="prompt-tab" data-prompt="vocab">词汇提取</button>
+        <span class="prompt-tab-sep"></span>
+        <button class="prompt-tab" data-prompt="translateDict">查词</button>
+        <button class="prompt-tab" data-prompt="translateSentence">翻译</button>
       </div>
 
       <div class="field">
@@ -83,7 +86,7 @@
           <button id="resetPrompt" class="btn-link">恢复当前默认</button>
         </div>
         <textarea id="prompt" rows="12" spellcheck="false"></textarea>
-        <div class="hint">用 <code>{transcript}</code> 表示字幕内容插入位置</div>
+        <div class="hint" id="promptHint">用 <code>{transcript}</code> 表示字幕内容插入位置</div>
       </div>
     </div>
 

@@ -955,7 +955,7 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
   background: #1a1a1a;
 }
 
-/* 学英语/词汇列表 */
+/* 单词/词汇列表 */
 #ytx-content-vocab {
   display: none;
   flex-direction: column;
@@ -1034,7 +1034,7 @@ html[dark] #ytx-resizer.ytx-resizer-active .ytx-resizer-dot,
   border-left: 2px solid #e5e7eb;
 }
 
-/* 暗色 - 学英语 */
+/* 暗色 - 单词 */
 html[dark] #ytx-content-vocab .ytx-empty,
 [dark] #ytx-content-vocab .ytx-empty {
   color: #6b7280;

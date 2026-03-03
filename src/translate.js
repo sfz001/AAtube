@@ -128,14 +128,16 @@
       return;
     }
     try {
-      chrome.storage.sync.get(['provider', 'claudeKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel'], function (s) {
+      chrome.storage.sync.get(['provider', 'claudeKey', 'openaiKey', 'geminiKey', 'claudeModel', 'openaiModel', 'geminiModel', 'promptTranslateDict', 'promptTranslateSentence'], function (s) {
         var provider = s.provider || 'claude';
         var keyMap = { claude: s.claudeKey, openai: s.openaiKey, gemini: s.geminiKey };
         var modelMap = { claude: s.claudeModel, openai: s.openaiModel, gemini: s.geminiModel };
         callback({
           provider: provider,
           activeKey: keyMap[provider] || '',
-          model: modelMap[provider] || ''
+          model: modelMap[provider] || '',
+          promptDict: s.promptTranslateDict || '',
+          promptSentence: s.promptTranslateSentence || '',
         });
       });
     } catch (_) {
@@ -298,7 +300,9 @@
         targetLang: getTargetLang(),
         provider: settings.provider,
         activeKey: settings.activeKey,
-        model: settings.model
+        model: settings.model,
+        promptDict: settings.promptDict,
+        promptSentence: settings.promptSentence,
       };
       // 传递上下文（textarea 全文），让字典模式结合语境解释
       if (context && context !== text) msg.context = context;

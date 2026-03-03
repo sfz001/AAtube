@@ -203,6 +203,13 @@ h1 {
   border-bottom-color: var(--color-primary);
 }
 
+.prompt-tab-sep {
+  width: 1px;
+  margin: 4px 4px;
+  background: var(--color-border-light);
+  flex-shrink: 0;
+}
+
 /* ── 表单字段 ──────────────────────────────────────── */
 .field {
   margin-bottom: 12px;

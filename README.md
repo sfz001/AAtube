@@ -1,28 +1,32 @@
 # AAtools
 
-Chrome 扩展 — AI 驱动的 YouTube 视频助手 & 全网划词翻译。
+自用 Chrome 扩展（Manifest V3）— AI 驱动的 **YouTube 视频助手** & **全网划词翻译**。
+
+原生 HTML/CSS/JS，零依赖，无构建步骤。支持 Claude / OpenAI / Gemini 三家 API。
 
 ## 安装
 
-### 方式一：从 Release 下载
+### 从 Release 下载
 
-1. 前往 [Releases](https://github.com/sfz001/AAtools/releases) 下载最新的 `AAtools-vX.X.X.zip`
+1. 前往 [Releases](https://github.com/sfz001/AAtools/releases) 下载最新 `AAtools-vX.X.X.zip`
 2. 解压到任意文件夹
-3. 打开 `chrome://extensions/` → 开启右上角「开发者模式」
+3. 打开 `chrome://extensions/` → 开启「开发者模式」
 4. 点击「加载已解压的扩展程序」→ 选择解压后的文件夹
 5. 点击浏览器工具栏的扩展图标，配置 API Key
 
-### 方式二：从源码
+### 从源码
 
-```
+```bash
 git clone https://github.com/sfz001/AAtools.git
 ```
 
-然后同上第 3-5 步。
+然后同上第 3–5 步。
 
-## 配置 API Key
+## 配置
 
-点击浏览器工具栏的扩展图标，打开设置页：
+点击浏览器工具栏的扩展图标进入设置页。
+
+### API Key
 
 | 提供商 | 推荐模型 | 获取 Key |
 |--------|----------|----------|
@@ -30,51 +34,95 @@ git clone https://github.com/sfz001/AAtools.git
 | OpenAI | GPT-5 mini | [OpenAI Platform](https://platform.openai.com/api-keys) |
 | Gemini | Gemini 3 Flash | [AI Studio](https://aistudio.google.com/apikey) |
 
-> **建议同时配置 Gemini Key**：当视频无字幕时，扩展会自动使用 Gemini 视频模式获取内容。你也可以手动点击「使用视频模式」来切换。
+> 建议同时配置 Gemini Key：当视频无字幕时，扩展会自动调用 Gemini 视频模式转录内容。
 
-## 功能一：YouTube 视频助手
+### 可选配置
 
-打开任意 YouTube 视频页面，右侧会出现 AAtools 面板：
+- **Notion 导出** — 填入 Integration Token + 父级页面 ID，笔记和导图可一键导出到 Notion
+- **GitHub Gist** — 填入 Personal Access Token（gist 权限），导出 Notion 时自动上传 HTML/SVG 原文件并嵌入链接
+- **设置导入/导出** — 支持将全部配置（含自定义 Prompt、已拉取的模型列表）导出为 JSON 文件，方便迁移
 
-### 全部生成
+## YouTube 视频助手
 
-点击「全部生成」按钮，一键并行生成所有内容（总结 + 笔记 + 卡片 + 导图 + 词汇）。也可以切到单个标签页单独生成。
+打开任意 YouTube 视频页面，右侧栏顶部会注入 AAtools 面板。
 
 ### 六个标签页
 
-| 标签 | 说明 |
+| 标签 | 功能 |
 |------|------|
-| **总结** | 生成带时间戳的结构化摘要，点击时间戳可跳转到视频对应位置 |
-| **笔记** | 生成精美 HTML 笔记，可下载、在新标签打开、导出到 Notion |
-| **问答** | 基于视频内容多轮对话，支持连续追问 |
-| **卡片** | 提取关键概念，生成可翻转的知识闪卡 |
-| **导图** | 生成交互式思维导图，支持缩放、折叠展开、新标签打开、导出 |
-| **学英语** | 从英文字幕中提取高级词汇短语，附音标、释义、例句 |
+| **总结** | 带时间戳的结构化摘要，点击时间戳跳转视频对应位置 |
+| **导图** | 交互式思维导图（SVG 渲染），支持缩放、平移、折叠展开、新标签打开 |
+| **笔记** | 精美 HTML 笔记（iframe 隔离渲染），可下载 / 新标签打开 / 导出 Notion |
+| **卡片** | 提取关键概念生成可翻转闪卡 |
+| **单词** | 从英文字幕中提取高级词汇，附音标、词性、释义、原句、时间戳 |
+| **问答** | 基于视频内容多轮对话，保留最近 40 条上下文 |
+
+点击「全部生成」按钮可一键并行生成所有内容（问答除外），也可切到单个标签页单独生成。
 
 ### 视频模式
 
-当视频没有字幕时，扩展会自动通过 Gemini 视频模式获取内容，面板顶部会显示提示条。
+无字幕视频会自动通过 Gemini 视频模式转录。有字幕但质量差（如自动生成）时，可手动点击「使用视频模式」切换。
 
-如果视频有字幕但质量较差（如自动生成的），你可以手动点击字幕区旁边的「使用视频模式」按钮切换。
+> 视频模式仅用 Gemini 转录字幕，后续分析仍使用你选择的 AI 模型。
 
-> 注意：视频模式仅用 Gemini 获取字幕内容，后续的总结、卡片等分析仍然使用你选择的 AI 模型。
+### 自定义 Prompt
 
-## 功能二：全网划词翻译
+设置页可分别自定义五个功能的 Prompt 模板，用 `{transcript}` 占位符标记字幕插入位置。支持恢复单个/全部默认。
 
-在任意网页上选中文字，即可弹出翻译窗口：
+## 全网划词翻译
 
-- 支持 Claude / OpenAI / Gemini 三种 AI 翻译
-- 可选目标语言
-- 支持固定弹窗、手动输入翻译
-- 自动识别源语言
+在任意网页选中文字，点击浮现的「译」图标即可翻译。
 
-### 其他功能
+### 功能特性
 
-- **可调分栏** — 拖拽视频和面板之间的分割条，自由调整宽度
-- **历史缓存** — 已生成的结果会缓存，再次打开同一视频自动恢复
-- **Notion 导出** — 在设置页填入 Notion Integration Token 和页面 ID，笔记和导图可一键导出
-- **自定义 Prompt** — 在设置页可修改各功能的提示词
+- **智能双模式** — 自动识别单词（≤3 词）和句段，单词走词典格式（音标 + 词性 + 释义 + 搭配 + 例句），句段走纯翻译
+- **语境查词** — 在翻译弹窗的原文区域中选中某个词，自动带上全文语境解释该词含义
+- **多语言** — 支持自动检测、中/英/日/韩/法/德/西/俄 目标语言切换
+- **弹窗交互** — 可拖拽、可固定（不随点击关闭）、可手动输入翻译、Ctrl+Enter 快捷发送
+- **iframe 支持** — 自动 hook 页面内 iframe 中的选区
+
+### 自定义 Prompt
+
+设置页可分别自定义查词模式和翻译模式的 Prompt 模板，用 `{langInstruction}` 占位符标记目标语言指令插入位置。
+
+## 其他特性
+
+- **可调分栏** — 拖拽视频与面板之间的分割条自由调整宽度
+- **历史缓存** — 生成结果持久化到 IndexedDB，再次打开同一视频自动恢复
 - **亮/暗色适配** — 自动跟随 YouTube 主题
+- **流式输出** — 所有 AI 生成均为流式渲染，实时显示进度
+- **自动保存** — 设置页所有修改 1.5 秒防抖自动保存
+
+## 开发
+
+无构建、无 lint、无测试。直接改代码：
+
+1. `chrome://extensions/` → 加载已解压的扩展程序（项目根目录）
+2. 修改代码后点击扩展页刷新图标，再刷新 YouTube 页面
+3. 修改 `background.js` 后需在扩展页重新加载 Service Worker
+
+### 项目结构
+
+```
+├── background.js          # Service Worker：API 调用、字幕抓取、视频转录
+├── manifest.json          # Manifest V3 配置
+├── options.html/js/css    # 设置页
+├── content.css            # YouTube 面板样式
+├── translate.css          # 划词翻译样式
+└── src/
+    ├── core.js            # YTX 命名空间、共享状态、字幕获取、缓存
+    ├── prompts.js         # 所有功能的默认 Prompt
+    ├── markdown.js        # Markdown 渲染
+    ├── export.js          # 导出（Markdown 下载 / Notion / Gist）
+    ├── summary.js         # 总结模块
+    ├── html-notes.js      # HTML 笔记模块
+    ├── chat.js            # 问答模块
+    ├── cards.js           # 知识卡片模块
+    ├── mindmap.js         # 思维导图模块（SVG 引擎）
+    ├── vocab.js           # 词汇提取模块
+    ├── panel.js           # 面板 UI + 消息路由（必须最后加载）
+    └── translate.js       # 划词翻译（独立于 YTX，所有页面生效）
+```
 
 ## 许可
 
