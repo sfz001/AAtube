@@ -160,6 +160,7 @@
             '<span>查看字幕</span>' +
             '<span class="arrow">\u25BC</span>' +
           '</button>' +
+          '<span id="ytx-seg-status" style="flex:1;font-size:11px;color:#7c3aed;margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>' +
           '<button id="ytx-use-video-mode" class="ytx-btn ytx-btn-video-mode">使用视频模式</button>' +
         '</div>' +
         '<div id="ytx-transcript-body"></div>' +
@@ -261,19 +262,22 @@
 
     // 视频模式：只有 full 文本，没有 segments
     if (!YTX.transcriptData.segments) {
-      var lines = YTX.transcriptData.full.split('\n').filter(function (l) { return l.trim(); });
+      // 按时间戳边界拆分（支持内联时间戳如 [00:38] 文字 [00:43] 文字）
+      var raw = YTX.transcriptData.full.replace(/\n/g, ' ');
+      var parts = raw.split(/(?=\[\d+:\d+(?::\d+)?\])/).filter(function (s) { return s.trim(); });
       body.innerHTML =
         '<div class="ytx-warning" style="padding:6px 12px;font-size:11px;color:#7c3aed;background:#ede9fe;border-radius:6px;margin-bottom:6px">以下为 Gemini 视频模式获取的内容</div>' +
-        lines.map(function (line) {
-          var m = line.match(/^\[(\d+:\d+)\]\s*(.*)/);
-          if (m) {
+        parts.map(function (part) {
+          var seg = part.trim();
+          var m = seg.match(/^\[(\d+:\d+(?::\d+)?)\]\s*(.*)/);
+          if (m && m[2].trim()) {
             var seconds = YTX.timeToSeconds(m[1]);
             return '<div class="ytx-transcript-line">' +
               '<span class="ytx-ts" data-time="' + seconds + '">[' + m[1] + ']</span>' +
-              '<span>' + YTX.escapeHtml(m[2]) + '</span>' +
+              '<span>' + YTX.escapeHtml(m[2].trim()) + '</span>' +
             '</div>';
           }
-          return '<div class="ytx-transcript-line"><span>' + YTX.escapeHtml(line) + '</span></div>';
+          return '<div class="ytx-transcript-line"><span>' + YTX.escapeHtml(seg) + '</span></div>';
         }).join('');
       return;
     }
@@ -480,6 +484,116 @@
         YTX.panel.appendChild(badge);
       }
       badge.textContent = message.provider + ' / ' + message.model;
+    }
+
+    // ── 视频转录流式 chunk ──
+    if (message.type === 'TRANSCRIBE_CHUNK') {
+      // 首个 chunk 到达，切换计时器文案
+      if (YTX._transcribeTimer && !YTX._transcribeReceiving) {
+        YTX._transcribeReceiving = true;
+      }
+      var body = YTX.panel.querySelector('#ytx-transcript-body');
+      if (!body) return;
+      var container = body.querySelector('#ytx-seg-container');
+      if (!container) return;
+      // 追加到流式缓冲区，按时间戳边界拆分渲染
+      if (!YTX._transcribeBuffer) YTX._transcribeBuffer = '';
+      YTX._transcribeBuffer += message.text;
+      // 按 [MM:SS] 或 [H:MM:SS] 边界拆分，保留时间戳在片段开头
+      var segments = YTX._transcribeBuffer.split(/(?=\[\d+:\d+(?::\d+)?\])/);
+      // 最后一段可能不完整（没遇到下一个时间戳），留在缓冲区
+      YTX._transcribeBuffer = segments.pop() || '';
+      for (var si = 0; si < segments.length; si++) {
+        // 每段可能含换行，合并为一条
+        var seg = segments[si].replace(/\n/g, ' ').trim();
+        if (!seg) continue;
+        var m = seg.match(/^\[(\d+:\d+(?::\d+)?)\]\s*(.*)/);
+        if (m) {
+          var seconds = YTX.timeToSeconds(m[1]);
+          var text = m[2].trim();
+          if (!text) continue;
+          container.insertAdjacentHTML('beforeend',
+            '<div class="ytx-transcript-line">' +
+            '<span class="ytx-ts" data-time="' + seconds + '">[' + m[1] + ']</span>' +
+            '<span>' + YTX.escapeHtml(text) + '</span></div>');
+        } else {
+          container.insertAdjacentHTML('beforeend',
+            '<div class="ytx-transcript-line"><span>' + YTX.escapeHtml(seg) + '</span></div>');
+        }
+      }
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
+    // ── 视频转录开始 ──
+    if (message.type === 'TRANSCRIBE_PROGRESS') {
+      var body = YTX.panel.querySelector('#ytx-transcript-body');
+      if (!body) return;
+      YTX._transcribeBuffer = '';
+      body.innerHTML = '<div id="ytx-seg-container"></div>';
+      var status = YTX.panel.querySelector('#ytx-seg-status');
+      if (status) {
+        status.style.color = '#7c3aed';
+        if (YTX._transcribeTimer) clearInterval(YTX._transcribeTimer);
+        YTX._transcribeReceiving = false;
+        var startTime = Date.now();
+        function updateTimer() {
+          var elapsed = Math.floor((Date.now() - startTime) / 1000);
+          var mm = Math.floor(elapsed / 60);
+          var ss = elapsed % 60;
+          var timeStr = mm > 0 ? mm + '分' + ss + '秒' : ss + '秒';
+          if (YTX._transcribeReceiving) {
+            status.textContent = '正在转录（' + timeStr + '）...';
+          } else {
+            status.textContent = 'Gemini 正在处理视频（' + timeStr + '）...';
+          }
+        }
+        updateTimer();
+        YTX._transcribeTimer = setInterval(updateTimer, 1000);
+      }
+      return;
+    }
+
+    // ── 视频转录完成 ──
+    if (message.type === 'TRANSCRIBE_SEGMENT') {
+      if (YTX._transcribeTimer) { clearInterval(YTX._transcribeTimer); YTX._transcribeTimer = null; }
+      var body = YTX.panel.querySelector('#ytx-transcript-body');
+      if (!body) return;
+      var container = body.querySelector('#ytx-seg-container');
+
+      // flush 缓冲区剩余内容
+      if (YTX._transcribeBuffer && container) {
+        var remaining = YTX._transcribeBuffer.replace(/\n/g, ' ').trim();
+        if (remaining) {
+          var segs = remaining.split(/(?=\[\d+:\d+(?::\d+)?\])/);
+          for (var fi = 0; fi < segs.length; fi++) {
+            var seg = segs[fi].trim();
+            if (!seg) continue;
+            var m = seg.match(/^\[(\d+:\d+(?::\d+)?)\]\s*(.*)/);
+            if (m && m[2].trim()) {
+              var seconds = YTX.timeToSeconds(m[1]);
+              container.insertAdjacentHTML('beforeend',
+                '<div class="ytx-transcript-line">' +
+                '<span class="ytx-ts" data-time="' + seconds + '">[' + m[1] + ']</span>' +
+                '<span>' + YTX.escapeHtml(m[2].trim()) + '</span></div>');
+            } else if (seg) {
+              container.insertAdjacentHTML('beforeend',
+                '<div class="ytx-transcript-line"><span>' + YTX.escapeHtml(seg) + '</span></div>');
+            }
+          }
+        }
+        YTX._transcribeBuffer = '';
+      }
+
+      if (message.text) {
+        if (!YTX.transcriptData) YTX.transcriptData = { full: '' };
+        YTX.transcriptData.full += (YTX.transcriptData.full ? '\n' : '') + message.text;
+      } else if (message.error && container) {
+        container.insertAdjacentHTML('beforeend',
+          '<div style="padding:4px 8px;font-size:11px;color:#b45309;background:#fef3c7;border-radius:4px;margin-bottom:8px">' +
+          '转录失败: ' + YTX.escapeHtml(message.error) + '</div>');
+      }
+      return;
     }
 
     // 按前缀分发到对应功能模块

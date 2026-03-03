@@ -52,6 +52,7 @@ const PROVIDERS = {
     placeholder: 'AIza...',
     helpUrl: 'https://aistudio.google.com/apikey',
     models: [
+      { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash-Lite — 最快' },
       { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash — 推荐' },
       { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro — 最强' },
       { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — 稳定' },

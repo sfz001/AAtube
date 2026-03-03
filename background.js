@@ -41,7 +41,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   if (message.type === 'TRANSCRIBE_VIDEO') {
-    handleTranscribeVideo(message).then(sendResponse);
+    handleTranscribeVideo(message, sender.tab.id).then(sendResponse);
     return true;
   }
   if (message.type === 'EXPORT_NOTION') {
@@ -446,30 +446,102 @@ function startKeepalive() {
   return () => clearInterval(id);
 }
 
-// ── 视频转录（一次性生成虚拟字幕）─────────────────────────
-async function handleTranscribeVideo(message) {
-  const { videoUrl, activeKey } = message;
+// ── 视频转录主流程 ─────────────────────────────────────────
+async function handleTranscribeVideo(message, tabId) {
+  const { videoUrl, activeKey, videoDuration } = message;
   const key = activeKey;
-  const model = 'gemini-3-flash-preview';
 
   if (!key) return { error: '请先在扩展设置中填入 Gemini API Key' };
 
-  const stopKeepalive = startKeepalive();
-  try {
-    console.log('[AATube] 视频转录开始:', videoUrl);
+  // 读取用户配置的 Gemini 模型，默认用 flash
+  const storage = await chrome.storage.sync.get(['geminiModel']);
+  const model = storage.geminiModel || 'gemini-3.1-flash-lite-preview';
 
-    const body = {
-      contents: [{
-        parts: [
-          { text: '请详细描述这个视频的完整内容。按时间顺序逐段描述，标注时间戳 [MM:SS]。输出纯文本，不要用 Markdown 格式。要求：\n1. 尽可能详细还原视频中说的每一个要点\n2. 保留专业术语和关键数据\n3. 每段用时间戳开头，如 [00:00] [01:30]\n4. 必须使用简体中文描述，不要使用繁体中文' },
-          { file_data: { file_uri: videoUrl } }
-        ]
-      }],
-      generationConfig: { maxOutputTokens: 8096 }
-    };
+  const stopKeepalive = startKeepalive();
+
+  try {
+    console.log('[AATube] 视频转录开始:', videoUrl, '时长(秒):', videoDuration || '未知', '模型:', model);
+    return await _fallbackVideoTranscribe(key, model, videoUrl, videoDuration, tabId);
+  } catch (err) {
+    console.error('[AATube] 视频转录异常:', err);
+    return { error: '视频分析失败: ' + (err.message || '') };
+  } finally {
+    stopKeepalive();
+  }
+}
+
+// ── 视频转录：单次请求 + 流式输出 ──────────────────────────
+async function _fallbackVideoTranscribe(key, model, videoUrl, videoDuration, tabId) {
+  const durationSec = videoDuration || 0;
+  const durationMin = durationSec ? Math.ceil(durationSec / 60) : 0;
+  console.log('[AATube] 视频转录开始, 时长:', durationMin, '分钟');
+
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, {
+      type: 'TRANSCRIBE_PROGRESS', index: 0, total: 1,
+      startSec: 0, endSec: durationSec,
+    }).catch(() => {});
+  }
+
+  const prompt = `You are a speech-to-text transcription tool. Your ONLY job is to listen to the AUDIO track of this video and write down exactly what the speakers say, word for word.
+
+CRITICAL RULES:
+- ONLY transcribe what you HEAR from the audio. IGNORE all visual elements: on-screen text, subtitles, captions, title cards, video description, and any other written text visible in the video.
+- If the video has on-screen text or subtitles in a DIFFERENT script/style than the spoken audio, that is a clear sign you are reading the screen instead of listening. STOP and only output what is spoken.
+- Output ONLY the spoken words. No summaries, no descriptions, no commentary, no introductions.
+- Preserve the original language exactly as spoken (English stays English, Chinese stays Chinese, etc.)
+- Keep all filler words, stutters, verbal tics — this is a verbatim transcript.
+- Do NOT fabricate or hallucinate any content that was not actually spoken in the audio.
+
+TIMESTAMP FORMAT:
+- Insert timestamps like [MM:SS] or [H:MM:SS] that reflect the ACTUAL video playback time when those words are spoken.
+- Each timestamp segment should be on its own line: [MM:SS] followed by the spoken text for that segment.
+- Timestamps should appear at natural speech boundaries (pauses, topic changes, new sentences), roughly every 20-40 seconds — but NOT at rigid fixed intervals.
+- NEVER use perfectly regular intervals (like exactly every 30s) — that is a sign of fabrication.
+
+IMPORTANT: Transcribe as much of the video as possible. Do NOT stop early. Keep going until you reach the end of the video or your output limit.
+
+OUTPUT: Plain text only, no Markdown formatting.`;
+
+  const res = await _callGeminiTranscribe(key, model, videoUrl, prompt, tabId);
+  if (res.error) return res;
+
+  // 通知前端 flush 缓冲区
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, {
+      type: 'TRANSCRIBE_SEGMENT', index: 0, total: 1,
+      startSec: 0, endSec: durationSec,
+      text: res.text, error: null,
+    }).catch(() => {});
+  }
+
+  console.log('[AATube] 转录完成，长度:', res.text.length);
+  return { text: res.text };
+}
+
+// 调用 Gemini streamGenerateContent 流式转录，带重试
+async function _callGeminiTranscribe(key, model, videoUrl, prompt, tabId) {
+  const body = {
+    contents: [{
+      parts: [
+        { text: prompt },
+        { file_data: { file_uri: videoUrl } }
+      ]
+    }],
+    generationConfig: { maxOutputTokens: 65536 }
+  };
+
+  const MAX_RETRIES = 2;
+  let lastError = '';
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const waitSec = attempt * 10;
+      console.log(`[AATube] 第 ${attempt} 次重试，等待 ${waitSec} 秒...`);
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+    }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -479,25 +551,53 @@ async function handleTranscribeVideo(message) {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('[AATube] 视频转录失败:', response.status, errText);
-      return { error: classifyApiError(response.status, errText, 'gemini') };
+      lastError = classifyApiError(response.status, errText, 'gemini');
+      if ((response.status === 503 || response.status === 429) && attempt < MAX_RETRIES) {
+        console.warn(`[AATube] 请求返回 ${response.status}，将重试`);
+        continue;
+      }
+      return { error: lastError };
     }
 
-    const result = await response.json();
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!text) {
-      const reason = result.candidates?.[0]?.finishReason || result.promptFeedback?.blockReason || '未知原因';
-      return { error: '视频转录无结果: ' + reason };
+    // 流式读取
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (!data || data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          const chunk = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (chunk) {
+            fullText += chunk;
+            if (tabId) {
+              chrome.tabs.sendMessage(tabId, {
+                type: 'TRANSCRIBE_CHUNK', text: chunk,
+              }).catch(() => {});
+            }
+          }
+        } catch (e) { /* ignore parse errors */ }
+      }
     }
 
-    console.log('[AATube] 视频转录完成，长度:', text.length);
-    return { text };
-  } catch (err) {
-    console.error('[AATube] 视频转录异常:', err);
-    return { error: '视频分析失败: ' + (err.message || '') };
-  } finally {
-    stopKeepalive();
+    if (!fullText) {
+      return { error: '转录无结果' };
+    }
+    return { text: fullText };
   }
+  return { error: lastError || '转录失败，请稍后重试' };
 }
 
 // ── API 错误分类提示 ─────────────────────────────────────

@@ -242,16 +242,26 @@ YTX._analyzeVideoWithGemini = async function () {
 
   if (YTX.panel) {
     var body = YTX.panel.querySelector('#ytx-transcript-body');
-    if (body) body.innerHTML = '<div class="ytx-warning" style="padding:8px 12px;font-size:12px;color:#7c3aed;background:#ede9fe;border-radius:6px">正在通过 Gemini 视频模式获取内容...</div>';
+    if (body) body.innerHTML = '<div class="ytx-warning" style="padding:8px 12px;font-size:12px;color:#7c3aed;background:#ede9fe;border-radius:6px">正在通过 Gemini 视频模式转录字幕，长视频会自动分段处理，请耐心等待...</div>';
   }
 
   var videoUrl = YTX.getVideoUrl();
+  // 获取视频时长（秒），用于判断是否需要分段转录
+  var videoDuration = 0;
+  try {
+    var videoEl = document.querySelector('video');
+    if (videoEl && videoEl.duration && isFinite(videoEl.duration)) {
+      videoDuration = Math.round(videoEl.duration);
+    }
+  } catch (e) { /* ignore */ }
+
   var result = await new Promise(function (resolve, reject) {
     try {
       chrome.runtime.sendMessage({
         type: 'TRANSCRIBE_VIDEO',
         videoUrl: videoUrl,
         activeKey: geminiKey,
+        videoDuration: videoDuration,
       }, function (resp) {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message || '视频分析请求失败'));
@@ -265,8 +275,21 @@ YTX._analyzeVideoWithGemini = async function () {
     }
   });
 
+  // 如果续写过程中已经通过 TRANSCRIBE_SEGMENT 消息渲染了内容，
+  // 只更新 transcriptData（供总结等功能使用），不重新渲染
+  if (YTX._transcribeTimer) { clearInterval(YTX._transcribeTimer); YTX._transcribeTimer = null; }
+  var alreadyRendered = YTX.panel && YTX.panel.querySelector('#ytx-seg-container');
   YTX.transcriptData = { full: result };
-  YTX.renderTranscript();
+  if (alreadyRendered) {
+    // 更新状态栏为完成
+    var status = YTX.panel.querySelector('#ytx-seg-status');
+    if (status) {
+      status.textContent = '转录完成';
+      status.style.color = '#15803d';
+    }
+  } else {
+    YTX.renderTranscript();
+  }
 };
 
 // ── 手动切换到视频模式 ──────────────────────────────
