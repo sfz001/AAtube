@@ -4,9 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**AAtools** — 自用 Chrome 扩展（Manifest V3），两大核心功能：① YouTube 视频 AI 助手（总结/笔记/问答/卡片/导图/词汇提取）② 全网划词翻译。支持 Claude / OpenAI / Gemini 三个 API 提供商，无字幕视频可通过 Gemini 视频模式分析。
+**AAtools** — 自用 Chrome 扩展（Manifest V3），三大核心功能：
+
+1. **YouTube 视频 AI 助手** — 总结/笔记/问答/卡片/导图/词汇提取
+2. **全网划词翻译** — 选词即译，字典/句段双模式
+3. **小红书体验增强** — 帖子弹窗滚动修复
+
+支持 Claude / OpenAI / Gemini 三个 API 提供商，无字幕视频可通过 Gemini 视频模式分析。
 
 **技术栈**: 原生 HTML/CSS/JS，零依赖，无构建步骤。
+
+## 目录结构
+
+```
+AAtools/
+├── youtube/          ← YouTube 视频助手模块
+│   ├── core.js          YTX 命名空间、共享状态、工具函数
+│   ├── prompts.js       默认 Prompt 模板
+│   ├── markdown.js      Markdown 渲染
+│   ├── export.js        Notion / Gist 导出
+│   ├── summary.js       总结功能
+│   ├── html-notes.js    HTML 笔记
+│   ├── chat.js          问答
+│   ├── cards.js         知识卡片
+│   ├── mindmap.js       思维导图
+│   ├── vocab.js         词汇提取
+│   ├── panel.js         面板 UI + 消息路由（必须最后加载）
+│   └── content.css      面板样式
+├── translate/        ← 划词翻译模块
+│   ├── translate.js     翻译功能（独立 IIFE，不依赖 YTX）
+│   └── translate.css    翻译弹窗样式
+├── xhs/              ← 小红书增强模块
+│   └── xhs-scroll-fix.js  帖子弹窗滚动修复
+├── background.js     ← Service Worker（API 调用，三模块共用）
+├── options.html/js/css ← 设置页
+├── icons/            ← 扩展图标
+└── manifest.json
+```
 
 ## Development
 
@@ -23,7 +57,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 YouTube 页面 (content scripts)          Service Worker
 ┌────────────────────────────┐    chrome.runtime    ┌──────────────┐
-│  src/*.js → YTX 命名空间    │ ◄──── sendMessage ──► │ background.js│
+│  youtube/*.js → YTX 命名空间│ ◄──── sendMessage ──► │ background.js│
 │  panel.js (消息路由 + UI)   │     (流式分段转发)     │ (API 调用)   │
 └────────────────────────────┘                       └──────────────┘
 ```
@@ -52,7 +86,7 @@ YouTube 页面 (content scripts)          Service Worker
 
 ### 全局命名空间 `YTX`
 
-所有 content scripts 共享 `var YTX` 全局对象（`src/core.js` 中定义）。关键状态：
+所有 YouTube content scripts 共享 `var YTX` 全局对象（`youtube/core.js` 中定义）。关键状态：
 
 - `YTX.panel` — 注入的面板 DOM 元素
 - `YTX.currentVideoId` — 当前视频 ID
@@ -121,7 +155,7 @@ YTX.features.KEY = {
 5. 失败时若有 Gemini Key，启用视频模式：调用 Gemini API（固定使用 `gemini-flash-lite-latest`，忽略用户模型选择）分析视频 URL 生成虚拟字幕
 6. 字幕截断保护：`YTX.TRANSCRIPT_MAX_CHARS = 200000`
 
-### 划词翻译（`src/translate.js`）
+### 划词翻译（`translate/translate.js`）
 
 完全独立于 YTX 命名空间的 IIFE，运行在所有页面（`<all_urls>`）。
 
@@ -132,9 +166,19 @@ YTX.features.KEY = {
 - **Pin 状态**: `isPinned` 控制点击外部是否关闭弹窗，`userPinPreference` 在页面会话内持久
 - **自有 Markdown 渲染器**: 不用 `YTX.renderMarkdown`，有独立的 regex 渲染规则（音标、词性、搭配等格式）
 
+### 小红书增强（`xhs/xhs-scroll-fix.js`）
+
+独立 IIFE，仅在 `xiaohongshu.com` 生效。
+
+- **问题**: 打开帖子弹窗后，滚动鼠标会导致背景页面滚动而非弹窗内容滚动
+- **原因**: 小红书用 JS 监听 wheel 事件驱动背景滚动
+- **修复**: capture 阶段拦截 wheel 事件，`stopPropagation` 阻断背景滚动处理器
+- **弹窗检测**: 结构化检测（`position: fixed` + 覆盖视口 40%+），不依赖 CSS 类名
+- **边界处理**: 弹窗内可滚动区域到达顶部/底部时 `preventDefault` 阻止穿透
+
 ### Prompt 模板
 
-- 所有默认 prompt 在 `src/prompts.js`（`YTX.prompts.*`），options.js 中也有一份 `DEFAULT_PROMPTS.*`（用于重置按钮）
+- 所有默认 prompt 在 `youtube/prompts.js`（`YTX.prompts.*`），options.js 中也有一份 `DEFAULT_PROMPTS.*`（用于重置按钮）
 - 占位符：YouTube 功能用 `{transcript}`，翻译用 `{langInstruction}`
 - 自定义 prompt 存储约定：**空字符串表示未自定义**，`getSettings()` 读取时回退到 `YTX.prompts.*` 默认值
 

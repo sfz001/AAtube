@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AAtools - YouTube 助手 & 划词翻译",
-  "version": "1.1.1",
-  "description": "AI 驱动的 YouTube 视频总结/笔记/思维导图/词汇提取 + 全网划词翻译",
+  "name": "AAtools - YouTube 助手 & 划词翻译 & 小红书增强",
+  "version": "1.2.0",
+  "description": "AI 驱动的 YouTube 视频总结/笔记/思维导图/词汇提取 + 全网划词翻译 + 小红书体验增强",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
     "https://api.anthropic.com/*",
@@ -20,25 +20,30 @@
     {
       "matches": ["https://www.youtube.com/*"],
       "js": [
-        "src/core.js",
-        "src/prompts.js",
-        "src/markdown.js",
-        "src/export.js",
-        "src/summary.js",
-        "src/html-notes.js",
-        "src/chat.js",
-        "src/cards.js",
-        "src/mindmap.js",
-        "src/vocab.js",
-        "src/panel.js"
+        "youtube/core.js",
+        "youtube/prompts.js",
+        "youtube/markdown.js",
+        "youtube/export.js",
+        "youtube/summary.js",
+        "youtube/html-notes.js",
+        "youtube/chat.js",
+        "youtube/cards.js",
+        "youtube/mindmap.js",
+        "youtube/vocab.js",
+        "youtube/panel.js"
       ],
-      "css": ["content.css"],
+      "css": ["youtube/content.css"],
       "run_at": "document_idle"
     },
     {
       "matches": ["<all_urls>"],
-      "js": ["src/translate.js"],
-      "css": ["translate.css"],
+      "js": ["translate/translate.js"],
+      "css": ["translate/translate.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.xiaohongshu.com/*", "https://xiaohongshu.com/*"],
+      "js": ["xhs/xhs-scroll-fix.js"],
       "run_at": "document_idle"
     }
   ],

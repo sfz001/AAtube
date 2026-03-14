@@ -1,6 +1,6 @@
 # AAtools
 
-自用 Chrome 扩展（Manifest V3）— AI 驱动的 **YouTube 视频助手** & **全网划词翻译**。
+自用 Chrome 扩展（Manifest V3）— AI 驱动的 **YouTube 视频助手** & **全网划词翻译** & **小红书体验增强**。
 
 原生 HTML/CSS/JS，零依赖，无构建步骤。支持 Claude / OpenAI / Gemini 三家 API。
 
@@ -42,7 +42,9 @@ git clone https://github.com/sfz001/AAtools.git
 - **GitHub Gist** — 填入 Personal Access Token（gist 权限），导出 Notion 时自动上传 HTML/SVG 原文件并嵌入链接
 - **设置导入/导出** — 支持将全部配置（含自定义 Prompt、已拉取的模型列表）导出为 JSON 文件，方便迁移
 
-## YouTube 视频助手
+---
+
+## 功能一：YouTube 视频助手
 
 打开任意 YouTube 视频页面，右侧栏顶部会注入 AAtools 面板。
 
@@ -69,7 +71,9 @@ git clone https://github.com/sfz001/AAtools.git
 
 设置页可分别自定义五个功能的 Prompt 模板，用 `{transcript}` 占位符标记字幕插入位置。支持恢复单个/全部默认。
 
-## 全网划词翻译
+---
+
+## 功能二：全网划词翻译
 
 在任意网页选中文字，点击浮现的「译」图标即可翻译。
 
@@ -84,6 +88,20 @@ git clone https://github.com/sfz001/AAtools.git
 ### 自定义 Prompt
 
 设置页可分别自定义查词模式和翻译模式的 Prompt 模板，用 `{langInstruction}` 占位符标记目标语言指令插入位置。
+
+---
+
+## 功能三：小红书体验增强
+
+在小红书浏览时自动生效，无需配置。
+
+### 帖子弹窗滚动修复
+
+- **问题** — 打开帖子弹窗后，滚动鼠标会导致背景页面滚动，而非帖子内容滚动到评论区
+- **修复** — 自动检测帖子弹窗，拦截滚动事件穿透，确保弹窗内容正常滚动
+- **检测方式** — 结构化检测（`position: fixed` 全屏覆盖），不依赖 CSS 类名，网站改版不影响
+
+---
 
 ## 其他特性
 
@@ -104,24 +122,27 @@ git clone https://github.com/sfz001/AAtools.git
 ### 项目结构
 
 ```
-├── background.js          # Service Worker：API 调用、字幕抓取、视频转录
-├── manifest.json          # Manifest V3 配置
-├── options.html/js/css    # 设置页
-├── content.css            # YouTube 面板样式
-├── translate.css          # 划词翻译样式
-└── src/
-    ├── core.js            # YTX 命名空间、共享状态、字幕获取、缓存
-    ├── prompts.js         # 所有功能的默认 Prompt
-    ├── markdown.js        # Markdown 渲染
-    ├── export.js          # 导出（Markdown 下载 / Notion / Gist）
-    ├── summary.js         # 总结模块
-    ├── html-notes.js      # HTML 笔记模块
-    ├── chat.js            # 问答模块
-    ├── cards.js           # 知识卡片模块
-    ├── mindmap.js         # 思维导图模块（SVG 引擎）
-    ├── vocab.js           # 词汇提取模块
-    ├── panel.js           # 面板 UI + 消息路由（必须最后加载）
-    └── translate.js       # 划词翻译（独立于 YTX，所有页面生效）
+├── background.js              # Service Worker：API 调用、字幕抓取、视频转录
+├── manifest.json              # Manifest V3 配置
+├── options.html/js/css        # 设置页
+├── youtube/                   # YouTube 视频助手模块
+│   ├── core.js                #   YTX 命名空间、共享状态、字幕获取、缓存
+│   ├── prompts.js             #   所有功能的默认 Prompt
+│   ├── markdown.js            #   Markdown 渲染
+│   ├── export.js              #   导出（Markdown 下载 / Notion / Gist）
+│   ├── summary.js             #   总结
+│   ├── html-notes.js          #   HTML 笔记
+│   ├── chat.js                #   问答
+│   ├── cards.js               #   知识卡片
+│   ├── mindmap.js             #   思维导图（SVG 引擎）
+│   ├── vocab.js               #   词汇提取
+│   ├── panel.js               #   面板 UI + 消息路由（必须最后加载）
+│   └── content.css            #   面板样式
+├── translate/                 # 划词翻译模块
+│   ├── translate.js           #   翻译功能（独立 IIFE，所有页面生效）
+│   └── translate.css          #   翻译弹窗样式
+└── xhs/                       # 小红书增强模块
+    └── xhs-scroll-fix.js      #   帖子弹窗滚动修复
 ```
 
 ## 许可
