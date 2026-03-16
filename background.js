@@ -90,7 +90,7 @@ async function scrapeTranscriptFromDOM(videoId) {
   // 解析新版转录面板（PAmodern_transcript_view）中的 segments
   function parseModernPanel() {
     const panel = document.querySelector('[target-id="PAmodern_transcript_view"]');
-    if (!panel || panel.getAttribute('visibility') !== 'ENGAGEMENT_PANEL_VISIBILITY_EXPANDED') return null;
+    if (!panel) return null;
     const segEls = panel.querySelectorAll('transcript-segment-view-model');
     if (segEls.length === 0) return null;
     const segments = [];
