@@ -73,7 +73,10 @@
     lastPoint = { x: e.clientX, y: e.clientY };
     directions = [];
     totalMoved = 0;
-    suppressContext = false;
+    // macOS Chrome 在 mousedown 时立即触发 contextmenu，菜单弹出后事件流被系统接管，
+    // mousemove/mouseup 收不到 → 手势失效。所以右键一按下就预先抑制 contextmenu，
+    // 让事件流保持通畅。代价：右键不会弹原生菜单，需要时用 Ctrl+Click 替代
+    suppressContext = true;
   }, true);
 
   document.addEventListener('mousemove', function (e) {
@@ -95,16 +98,40 @@
     showIndicator(g ? g.label : '手势 ' + (key.split('').map(c => ({L:'←',R:'→',U:'↑',D:'↓'}[c])).join('')), !!g);
   }, true);
 
+  // macOS 触摸板按住右键 + 另一根手指滑动 → 系统发 wheel 事件而非 mousemove
+  // tracking 期间把 wheel 也算成手势位移；deltaX/deltaY 取反以匹配手指物理方向（macOS 自然滚动）
+  document.addEventListener('wheel', function (e) {
+    if (!tracking) return;
+    if (!e.isTrusted) return;
+    const dx = -e.deltaX;
+    const dy = -e.deltaY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1) return;
+    totalMoved += dist;
+    if (Math.abs(dx) < MIN_SEGMENT && Math.abs(dy) < MIN_SEGMENT) return;
+
+    const d = dirOf(dx, dy);
+    if (directions[directions.length - 1] !== d) directions.push(d);
+
+    if (totalMoved < MIN_GESTURE) return;
+    const key = directions.join('');
+    const g = GESTURES[key];
+    showIndicator(g ? g.label : '手势 ' + (key.split('').map(c => ({L:'←',R:'→',U:'↑',D:'↓'}[c])).join('')), !!g);
+
+    // 阻止页面同时滚动（用户在做手势，不是在浏览内容）
+    e.preventDefault();
+  }, { passive: false, capture: true });
+
   document.addEventListener('mouseup', function (e) {
     if (!tracking || e.button !== 2) return;
     if (!e.isTrusted) return;
     tracking = false;
     hideIndicator();
 
-    if (totalMoved < MIN_GESTURE) return; // 普通右键，放行原生菜单
-
-    suppressContext = true;
+    // 200ms 后清掉 suppressContext，兜底防止 macOS 上 mouseup 后还有延后的 contextmenu
     setTimeout(() => { suppressContext = false; }, 200);
+
+    if (totalMoved < MIN_GESTURE) return; // 没移动，不执行任何手势
 
     const key = directions.join('');
     const g = GESTURES[key];
