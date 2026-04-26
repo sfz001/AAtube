@@ -7,6 +7,14 @@
   const MIN_SEGMENT = 30; // 单段最小位移（像素）
   const MIN_GESTURE = 8;  // 累计移动超过此值才视为手势（屏蔽误触）
 
+  // contextmenu 抑制策略（保留菜单 + 启用手势的两全方案）：
+  // - Windows/Linux：contextmenu 在 mouseup 之后触发 → mouseup 时根据 totalMoved 判断
+  //   普通右键弹菜单、右键拖动识别手势，无需 modifier
+  // - macOS：contextmenu 在 mousedown 时立即触发，无法事后判断 → 用 Shift 键区分
+  //   普通右键 → 弹菜单；Shift + 右键 → 抑制菜单，进入手势识别
+  // 这样所有平台都能弹右键菜单，macOS 用户做手势时按住 Shift
+  const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.platform || '');
+
   let enabled = true; // 总开关，默认启用，由 storage 决定
   let tracking = false;
   let lastPoint = null;
@@ -72,14 +80,16 @@
     if (!enabled) return;
     if (!e.isTrusted) return;
     if (e.button !== 2) return;
+    // macOS 上：普通右键放行让菜单弹出；只有 Shift+右键才进入手势追踪
+    // 其他平台：直接进入手势追踪，mouseup 时再决定是否抑制菜单
+    if (isMac && !e.shiftKey) return;
     tracking = true;
     lastPoint = { x: e.clientX, y: e.clientY };
     directions = [];
     totalMoved = 0;
-    // macOS Chrome 在 mousedown 时立即触发 contextmenu，菜单弹出后事件流被系统接管，
-    // mousemove/mouseup 收不到 → 手势失效。所以右键一按下就预先抑制 contextmenu，
-    // 让事件流保持通畅。代价：右键不会弹原生菜单，需要时用 Ctrl+Click 替代
-    suppressContext = true;
+    // macOS 上必须 mousedown 时就抑制（contextmenu 立即触发）
+    // 其他平台等 mouseup 时根据是否手势再决定
+    suppressContext = isMac;
   }, true);
 
   document.addEventListener('mousemove', function (e) {
@@ -131,10 +141,15 @@
     tracking = false;
     hideIndicator();
 
-    // 200ms 后清掉 suppressContext，兜底防止 macOS 上 mouseup 后还有延后的 contextmenu
-    setTimeout(() => { suppressContext = false; }, 200);
+    if (totalMoved < MIN_GESTURE) {
+      // 普通右键（无拖动）：非 macOS 上保持 suppressContext=false → 菜单正常弹
+      // macOS 上 mousedown 时已经抑制了，无法补救
+      return;
+    }
 
-    if (totalMoved < MIN_GESTURE) return; // 没移动，不执行任何手势
+    // 有手势：抑制 contextmenu 防止菜单弹出（macOS 上已经抑制了，这里 idempotent）
+    suppressContext = true;
+    setTimeout(() => { suppressContext = false; }, 200);
 
     const key = directions.join('');
     const g = GESTURES[key];
