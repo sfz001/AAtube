@@ -54,6 +54,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (message.type === 'GESTURE_RELOAD_HARD') {
+    if (sender.tab?.id != null) chrome.tabs.reload(sender.tab.id, { bypassCache: true }).catch(() => {});
+    sendResponse({ ok: true });
+    return false;
+  }
   return false;
 });
 
