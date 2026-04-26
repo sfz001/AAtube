@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**AAtools** — 自用 Chrome 扩展（Manifest V3），三大核心功能：
+**AAtools** — 自用 Chrome 扩展（Manifest V3），四大核心功能：
 
 1. **YouTube 视频 AI 助手** — 总结/笔记/问答/卡片/导图/词汇提取
 2. **全网划词翻译** — 选词即译，字典/句段双模式
 3. **小红书体验增强** — 帖子弹窗滚动修复
+4. **鼠标手势** — 右键拖拽：后退/前进/关闭标签页/恢复关闭页
 
 支持 Claude / OpenAI / Gemini / MiniMax 四个 API 提供商，无字幕视频可通过 Gemini 视频模式分析。
 
@@ -36,7 +37,9 @@ AAtools/
 │   └── translate.css    翻译弹窗样式
 ├── xhs/              ← 小红书增强模块
 │   └── xhs-scroll-fix.js  帖子弹窗滚动修复
-├── background.js     ← Service Worker（API 调用，三模块共用）
+├── gestures/         ← 鼠标手势模块
+│   └── gestures.js        右键拖拽手势识别（独立 IIFE）
+├── background.js     ← Service Worker（API 调用 + 标签页操作）
 ├── options.html/js/css ← 设置页
 ├── icons/            ← 扩展图标
 └── manifest.json
@@ -83,6 +86,8 @@ YouTube 页面 (content scripts)          Service Worker
 | `TRANSLATE` | `TRANSLATE` | 划词翻译 |
 | `EXPORT_NOTION` | — | 同步返回 |
 | `UPLOAD_GIST` | — | 同步返回 |
+| `GESTURE_CLOSE_TAB` | — | 关闭 sender 所在标签页 |
+| `GESTURE_REOPEN_TAB` | — | `chrome.sessions.restore()` 恢复刚关闭的标签页 |
 
 ### 全局命名空间 `YTX`
 
@@ -176,6 +181,45 @@ YTX.features.KEY = {
 - **弹窗检测**: 结构化检测（`position: fixed` + 覆盖视口 40%+），不依赖 CSS 类名
 - **边界处理**: 弹窗内可滚动区域到达顶部/底部时 `preventDefault` 阻止穿透
 
+### 鼠标手势（`gestures/gestures.js`）
+
+独立 IIFE，运行在所有页面（`<all_urls>`），仅在顶层窗口启用（跳过 iframe，避免重复触发与跨域冲突）。
+
+**手势映射**
+
+| 手势 | 序列 | 动作 | 实现 |
+|---|---|---|---|
+| `←` | `L` | 后退 | `history.back()` |
+| `→` | `R` | 前进 | `history.forward()` |
+| `↓→` | `DR` | 关闭当前标签页 | 消息 `GESTURE_CLOSE_TAB` → `chrome.tabs.remove(sender.tab.id)` |
+| `←↑` | `LU` | 恢复刚关闭的标签页 | 消息 `GESTURE_REOPEN_TAB` → `chrome.sessions.restore()` |
+
+**识别逻辑**
+
+- 右键 `mousedown` 开始追踪 → `mousemove` 累计方向序列 → `mouseup` 匹配 `GESTURES` 表执行
+- **单段阈值** `MIN_SEGMENT = 30` 像素：超过才记一次方向
+- **总位移阈值** `MIN_GESTURE = 8` 像素：低于此值视为普通右键，放行原生菜单
+- **方向去重**: 连续相同方向只记一次，所以 `LL` 不存在，长拖动也只算 `L`
+- **`←↑` 不会误触发后退**: 动作只在 `mouseup` 时根据完整序列执行，一气呵成的 `←↑` 整段被识别为 `LU`
+- **抑制 contextmenu**: 拖动达到阈值后置 `suppressContext = true`（200ms 窗口），下一次右键菜单被吞掉
+
+**视觉反馈**
+
+- 屏幕中央浮层（`z-index: 2147483647`，`pointer-events: none`），实时显示当前方向序列
+- 命中合法手势时不透明度提升至 `1`，未命中维持 `0.7`
+- `mouseup` 后立即隐藏；`window.blur` 时复位 tracking 状态防卡死
+
+**所需权限**
+
+- `sessions` — `chrome.sessions.restore()` 必需
+- `chrome.tabs.remove` 不需要单独权限（通过 sender.tab.id 操作自身 tab）
+
+**总开关**
+
+- `chrome.storage.sync.enableGestures`（boolean，默认 true，设置页"功能开关"卡片）
+- 启动时一次性读取，并监听 `chrome.storage.onChanged`：用户在设置页切换后所有页面**无需刷新**即可生效
+- 关闭后 `mousedown` 直接 return，原生右键菜单完全不受影响
+
 ### Prompt 模板
 
 - 所有默认 prompt 在 `youtube/prompts.js`（`YTX.prompts.*`），options.js 中也有一份 `DEFAULT_PROMPTS.*`（用于重置按钮）
@@ -193,6 +237,7 @@ YTX.features.KEY = {
 - `notionKey`, `notionPage`, `githubKey` — 导出集成
 - `generateAllSummary`, `generateAllMindmap`, `generateAllHtml` — 一键生成是否包含对应功能（boolean，默认 true，`!== false` 判断）
 - `generateAllCards`, `generateAllVocab` — 一键生成是否包含卡片/词汇（boolean，默认 false）
+- `enableGestures` — 鼠标手势总开关（boolean，默认 true，`!== false` 判断）
 - `mindmapAlignTop` — 导图对齐偏好
 
 **`chrome.storage.local`**（仅本地）：

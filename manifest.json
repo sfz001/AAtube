@@ -3,7 +3,7 @@
   "name": "AAtools - YouTube 助手 & 划词翻译 & 小红书增强",
   "version": "1.2.0",
   "description": "AI 驱动的 YouTube 视频总结/笔记/思维导图/词汇提取 + 全网划词翻译 + 小红书体验增强",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "sessions"],
   "host_permissions": [
     "https://api.anthropic.com/*",
     "https://api.openai.com/*",
@@ -44,6 +44,11 @@
     {
       "matches": ["https://www.xiaohongshu.com/*", "https://xiaohongshu.com/*"],
       "js": ["xhs/xhs-scroll-fix.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["gestures/gestures.js"],
       "run_at": "document_idle"
     }
   ],

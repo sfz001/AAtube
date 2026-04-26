@@ -52,6 +52,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ started: true });
     return true;
   }
+  if (message.type === 'GESTURE_CLOSE_TAB') {
+    if (sender.tab?.id != null) chrome.tabs.remove(sender.tab.id).catch(() => {});
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.type === 'GESTURE_REOPEN_TAB') {
+    chrome.sessions.restore().catch(() => {});
+    sendResponse({ ok: true });
+    return false;
+  }
   return false;
 });
 

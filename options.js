@@ -197,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'claudeModel', 'openaiModel', 'geminiModel', 'minimaxModel', 'model',
     'notionKey', 'notionPage', 'githubKey',
     'generateAllSummary', 'generateAllMindmap', 'generateAllHtml', 'generateAllCards', 'generateAllVocab',
+    'enableGestures',
     ...ALL_PROMPT_KEYS,
   ];
 
@@ -235,6 +236,8 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#generateAllHtml').checked = data.generateAllHtml !== false;
       $('#generateAllCards').checked = !!data.generateAllCards;
       $('#generateAllVocab').checked = !!data.generateAllVocab;
+
+      $('#enableGestures').checked = data.enableGestures !== false;
 
       $('#notionKey').value = data.notionKey || '';
       $('#notionPage').value = data.notionPage || '';
@@ -301,6 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'claudeModel', 'openaiModel', 'geminiModel', 'minimaxModel', 'model',
     'notionKey', 'notionPage', 'githubKey',
     'generateAllSummary', 'generateAllMindmap', 'generateAllHtml', 'generateAllCards', 'generateAllVocab',
+    'enableGestures',
     'mindmapAlignTop',
     ...ALL_PROMPT_KEYS,
   ];
@@ -507,6 +511,7 @@ function saveSettings(isManual) {
     generateAllHtml: $('#generateAllHtml').checked,
     generateAllCards: $('#generateAllCards').checked,
     generateAllVocab: $('#generateAllVocab').checked,
+    enableGestures: $('#enableGestures').checked,
   };
 
   // 各功能 prompt：空值不存（使用默认），有值才写入
