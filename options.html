@@ -87,46 +87,15 @@
       </div>
     </div>
 
-    <!-- Card 2: 自定义 Prompt -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-header-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        </div>
-        <div class="card-title">自定义 Prompt</div>
-        <button id="resetAllPrompts" class="btn-link" style="margin-left:auto">恢复所有默认</button>
-      </div>
-
-      <div class="prompt-tabs">
-        <button class="prompt-tab active" data-prompt="summary">总结</button>
-        <button class="prompt-tab" data-prompt="html">HTML 笔记</button>
-        <button class="prompt-tab" data-prompt="cards">知识卡片</button>
-        <button class="prompt-tab" data-prompt="mindmap">思维导图</button>
-        <button class="prompt-tab" data-prompt="vocab">词汇提取</button>
-        <span class="prompt-tab-sep"></span>
-        <button class="prompt-tab" data-prompt="translateDict">查词</button>
-        <button class="prompt-tab" data-prompt="translateSentence">翻译</button>
-      </div>
-
-      <div class="field">
-        <div class="label-row">
-          <label for="prompt">Prompt 模板</label>
-          <button id="resetPrompt" class="btn-link">恢复当前默认</button>
-        </div>
-        <textarea id="prompt" rows="12" spellcheck="false"></textarea>
-        <div class="hint" id="promptHint">用 <code>{transcript}</code> 表示字幕内容插入位置</div>
-      </div>
-    </div>
-
-    <!-- Card: 一键生成 -->
+    <!-- Card: YouTube 设置 -->
     <div class="card">
       <div class="card-header">
         <div class="card-header-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         </div>
         <div>
-          <div class="card-title">一键生成</div>
-          <div class="card-desc">选择「全部生成」时包含哪些功能</div>
+          <div class="card-title">YouTube 设置</div>
+          <div class="card-desc">「全部生成」时包含哪些功能</div>
         </div>
       </div>
       <div class="field">
@@ -146,15 +115,15 @@
       </div>
     </div>
 
-    <!-- Card: 功能开关 -->
+    <!-- Card: 鼠标手势设置 -->
     <div class="card">
       <div class="card-header">
         <div class="card-header-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </div>
         <div>
-          <div class="card-title">功能开关</div>
-          <div class="card-desc">关闭暂时不需要的功能</div>
+          <div class="card-title">鼠标手势设置</div>
+          <div class="card-desc">右键拖拽手势开关</div>
         </div>
       </div>
       <div class="field">
