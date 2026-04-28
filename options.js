@@ -118,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'claudeModel', 'openaiModel', 'geminiModel', 'minimaxModel', 'sub2apiModel', 'sub2api2Model', 'sub2api3Model',
     'sub2apiBaseUrl', 'sub2api2BaseUrl', 'sub2api3BaseUrl', 'model',
     'generateAllSummary', 'generateAllMindmap', 'generateAllHtml', 'generateAllCards', 'generateAllVocab',
-    'enableGestures',
+    'enableGestures', 'gestureKeepMenu',
     ...ALL_PROMPT_KEYS,
   ];
 
@@ -165,6 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#generateAllVocab').checked = !!data.generateAllVocab;
 
       $('#enableGestures').checked = data.enableGestures !== false;
+      $('#gestureKeepMenu').checked = !!data.gestureKeepMenu;
 
       var vb = document.getElementById('version-badge');
       if (vb) vb.textContent = 'v' + chrome.runtime.getManifest().version;
@@ -194,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'claudeModel', 'openaiModel', 'geminiModel', 'minimaxModel', 'sub2apiModel', 'sub2api2Model', 'sub2api3Model',
     'sub2apiBaseUrl', 'sub2api2BaseUrl', 'sub2api3BaseUrl', 'model',
     'generateAllSummary', 'generateAllMindmap', 'generateAllHtml', 'generateAllCards', 'generateAllVocab',
-    'enableGestures',
+    'enableGestures', 'gestureKeepMenu',
     'mindmapAlignTop',
     ...ALL_PROMPT_KEYS,
   ];
@@ -394,6 +395,7 @@ function saveSettings(isManual) {
     generateAllCards: $('#generateAllCards').checked,
     generateAllVocab: $('#generateAllVocab').checked,
     enableGestures: $('#enableGestures').checked,
+    gestureKeepMenu: $('#gestureKeepMenu').checked,
   };
 
   chrome.storage.sync.set(saveData, () => {

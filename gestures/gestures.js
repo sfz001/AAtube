@@ -1,5 +1,5 @@
-// 鼠标手势：右键按住拖动触发
-// ← 后退   → 前进   ↓→ 关闭标签页   ←↑ 恢复关闭的标签页
+// 鼠标手势：右键按住拖动触发（Mac 触控板：左下角=右键 后按住滑动）
+// ← 后退   → 前进   ↓ 滚到底   ↑ 滚到顶   ↓→ 关闭   ←↑ 恢复   ↑↓ 强制刷新
 (function () {
   'use strict';
   if (window.top !== window) return; // 只在顶层窗口启用，跳过 iframe
@@ -7,15 +7,16 @@
   const MIN_SEGMENT = 30; // 单段最小位移（像素）
   const MIN_GESTURE = 8;  // 累计移动超过此值才视为手势（屏蔽误触）
 
-  // contextmenu 抑制策略（保留菜单 + 启用手势的两全方案）：
-  // - Windows/Linux：contextmenu 在 mouseup 之后触发 → mouseup 时根据 totalMoved 判断
-  //   普通右键弹菜单、右键拖动识别手势，无需 modifier
-  // - macOS：contextmenu 在 mousedown 时立即触发，无法事后判断 → 用 Shift 键区分
-  //   普通右键 → 弹菜单；Shift + 右键 → 抑制菜单，进入手势识别
-  // 这样所有平台都能弹右键菜单，macOS 用户做手势时按住 Shift
+  // contextmenu 抑制策略，由 gestureKeepMenu 设置切换：
+  // - keepMenu=false（默认，触控板友好）：右键直接进手势模式，contextmenu 始终抑制
+  //   适合 Mac 触控板"左下角=右键"配置，按住 + 滑动即触发手势
+  // - keepMenu=true（保留菜单）：
+  //   · Windows/Linux：contextmenu 在 mouseup 之后触发 → 短按弹菜单、拖动触发手势
+  //   · macOS：contextmenu 在 mousedown 时立即触发 → 普通右键弹菜单、Shift+右键 进手势
   const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.platform || '');
 
   let enabled = true; // 总开关，默认启用，由 storage 决定
+  let keepMenu = false; // 是否保留原生右键菜单（默认 false：右键直接走手势）
   let tracking = false;
   let lastPoint = null;
   let directions = [];
@@ -25,13 +26,18 @@
 
   // 启动时读取设置；监听变化实时响应（无需刷新页面）
   try {
-    chrome.storage.sync.get(['enableGestures'], (data) => {
+    chrome.storage.sync.get(['enableGestures', 'gestureKeepMenu'], (data) => {
       enabled = data.enableGestures !== false;
+      keepMenu = !!data.gestureKeepMenu;
     });
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'sync' && changes.enableGestures) {
+      if (area !== 'sync') return;
+      if (changes.enableGestures) {
         enabled = changes.enableGestures.newValue !== false;
         if (!enabled) { tracking = false; hideIndicator(); }
+      }
+      if (changes.gestureKeepMenu) {
+        keepMenu = !!changes.gestureKeepMenu.newValue;
       }
     });
   } catch (_) {}
@@ -80,16 +86,15 @@
     if (!enabled) return;
     if (!e.isTrusted) return;
     if (e.button !== 2) return;
-    // macOS 上：普通右键放行让菜单弹出；只有 Shift+右键才进入手势追踪
-    // 其他平台：直接进入手势追踪，mouseup 时再决定是否抑制菜单
-    if (isMac && !e.shiftKey) return;
+    // keepMenu=true 且 Mac 时：普通右键让菜单弹出，仅 Shift+右键 进手势
+    // keepMenu=false 时：所有平台右键直接进手势
+    if (keepMenu && isMac && !e.shiftKey) return;
     tracking = true;
     lastPoint = { x: e.clientX, y: e.clientY };
     directions = [];
     totalMoved = 0;
-    // macOS 上必须 mousedown 时就抑制（contextmenu 立即触发）
-    // 其他平台等 mouseup 时根据是否手势再决定
-    suppressContext = isMac;
+    // 抑制 contextmenu：keepMenu=false 一律抑制；keepMenu=true 时仅 Mac mousedown 立即抑制（Win/Linux 等 mouseup 决定）
+    suppressContext = !keepMenu || isMac;
   }, true);
 
   document.addEventListener('mousemove', function (e) {
@@ -142,12 +147,14 @@
     hideIndicator();
 
     if (totalMoved < MIN_GESTURE) {
-      // 普通右键（无拖动）：非 macOS 上保持 suppressContext=false → 菜单正常弹
-      // macOS 上 mousedown 时已经抑制了，无法补救
+      // 短按（无拖动）：keepMenu=true 时希望菜单弹出
+      //   · Win/Linux：suppressContext=false（mousedown 时未抑制）→ 菜单正常弹
+      //   · Mac：mousedown 时已 suppressContext=true → 菜单已被吞，无法补救（这是 keepMenu+Mac 模式 Shift 短按的代价，可以接受）
+      // keepMenu=false 时：suppressContext=true，菜单本就不该弹
       return;
     }
 
-    // 有手势：抑制 contextmenu 防止菜单弹出（macOS 上已经抑制了，这里 idempotent）
+    // 有手势：始终抑制 contextmenu（Mac 上 mousedown 时已抑制，这里 idempotent）
     suppressContext = true;
     setTimeout(() => { suppressContext = false; }, 200);
 
