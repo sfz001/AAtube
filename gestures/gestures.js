@@ -10,9 +10,11 @@
   // contextmenu 抑制策略，由 gestureKeepMenu 设置切换：
   // - keepMenu=false（默认，触控板友好）：右键直接进手势模式，contextmenu 始终抑制
   //   适合 Mac 触控板"左下角=右键"配置，按住 + 滑动即触发手势
+  //   · macOS 上 Shift+右键 作为逃生口：放行让原生菜单弹出
   // - keepMenu=true（保留菜单）：
   //   · Windows/Linux：contextmenu 在 mouseup 之后触发 → 短按弹菜单、拖动触发手势
   //   · macOS：contextmenu 在 mousedown 时立即触发 → 普通右键弹菜单、Shift+右键 进手势
+  // Mac 上的总规则：Shift 翻转 keepMenu 的行为（XOR）— Shift 状态和 keepMenu 一致即弹菜单
   const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.platform || '');
 
   let enabled = true; // 总开关，默认启用，由 storage 决定
@@ -86,9 +88,12 @@
     if (!enabled) return;
     if (!e.isTrusted) return;
     if (e.button !== 2) return;
-    // keepMenu=true 且 Mac 时：普通右键让菜单弹出，仅 Shift+右键 进手势
-    // keepMenu=false 时：所有平台右键直接进手势
-    if (keepMenu && isMac && !e.shiftKey) return;
+    // Mac 上 Shift 与 keepMenu 不一致时让菜单弹出（不进 tracking）：
+    //   keepMenu=true  + 普通右键   → 弹菜单（默认保留菜单行为）
+    //   keepMenu=false + Shift+右键 → 弹菜单（手势模式下的逃生口）
+    // 非 Mac：keepMenu=true 时由 mouseup 决定；keepMenu=false 时一律进手势
+    // 显式清 suppressContext，防止上一次未拖动的 mouseup 残留的 true 把这次菜单吞掉
+    if (isMac && keepMenu !== e.shiftKey) { suppressContext = false; return; }
     tracking = true;
     lastPoint = { x: e.clientX, y: e.clientY };
     directions = [];
@@ -166,6 +171,9 @@
   }, true);
 
   document.addEventListener('contextmenu', function (e) {
+    // Mac 上 Shift 与 keepMenu 不一致时直接放行原生菜单（手势模式的 Shift 逃生口 + 保留菜单模式的默认行为）
+    // 直接读 e.shiftKey，不依赖 mousedown 提前设状态——某些情况下 contextmenu 事件顺序可能在 mousedown 前
+    if (isMac && keepMenu !== e.shiftKey) return;
     if (suppressContext) {
       e.preventDefault();
       e.stopPropagation();
