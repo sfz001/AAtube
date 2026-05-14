@@ -69,10 +69,33 @@ ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #columns.ytx-column
   --ytd-watch-flexy-min-player-height: 135px !important;
 }
 ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #primary,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #primary-inner,
 ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #player,
 ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #player-container-outer,
 ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #player-container-inner {
   min-width: 0 !important;
+}
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #primary-inner,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #below,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) ytd-watch-metadata,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) ytd-comments,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #comments {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #below,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #below *,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #comments,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #comments * {
+  min-width: 0 !important;
+}
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #below yt-formatted-string,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #below ytd-text-inline-expander,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #below #description,
+ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #comments yt-formatted-string {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 ytd-watch-flexy.ytx-resized:not([theater]):not([fullscreen]) #player-container-inner {
   max-width: 100% !important;
