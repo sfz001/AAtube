@@ -381,17 +381,96 @@
 
     columns.style.display = 'flex';
     columns.style.flexWrap = 'nowrap';
+    columns.classList.add('ytx-columns-layout');
 
     // 默认分栏：视频占 3/5，AAtools 占 2/5
-    var resizerWidth = 24;
     var splitRatio = 3 / 5; // 当前 primary 占比，拖动时更新
 
+    function resetColumnWidths() {
+      primary.style.width = '';
+      primary.style.maxWidth = '';
+      primary.style.minWidth = '';
+      primary.style.flex = '';
+
+      secondary.style.width = '';
+      secondary.style.maxWidth = '';
+      secondary.style.minWidth = '';
+      secondary.style.flex = '';
+    }
+
+    function applyWatchModeGutter(watchFlexy) {
+      var leftGutter = 'clamp(24px, 2.5vw, 40px)';
+      var rightGutter = 'clamp(12px, 1.5vw, 24px)';
+      columns.style.boxSizing = 'border-box';
+      if (isTheaterMode(watchFlexy)) {
+        columns.style.boxSizing = '';
+        columns.style.width = '';
+        columns.style.marginLeft = '';
+        columns.style.marginRight = '';
+        columns.style.paddingLeft = '';
+        columns.style.paddingRight = '';
+        return;
+      }
+      columns.style.width = 'calc(100% - ' + leftGutter + ' - ' + rightGutter + ')';
+      columns.style.marginLeft = leftGutter;
+      columns.style.marginRight = rightGutter;
+      columns.style.paddingLeft = '';
+      columns.style.paddingRight = '';
+    }
+
+    function getColumnsMetrics() {
+      var rect = columns.getBoundingClientRect();
+      var styles = window.getComputedStyle(columns);
+      var paddingLeft = parseFloat(styles.paddingLeft) || 0;
+      var paddingRight = parseFloat(styles.paddingRight) || 0;
+      return {
+        rect: rect,
+        paddingLeft: paddingLeft,
+        contentWidth: Math.max(0, rect.width - paddingLeft - paddingRight),
+      };
+    }
+
+    function getResizerWidth() {
+      return resizer.getBoundingClientRect().width || 32;
+    }
+
+    function getLayoutLimits(totalWidth, resizerWidth) {
+      var minSecondary = Math.min(440, Math.max(320, totalWidth * 0.34));
+      var maxPrimary = totalWidth - minSecondary - resizerWidth;
+      var minPrimary = Math.min(320, Math.max(240, totalWidth * 0.16));
+      if (maxPrimary < minPrimary) minPrimary = Math.max(0, maxPrimary);
+      return {
+        minPrimary: minPrimary,
+        maxPrimary: Math.max(0, maxPrimary),
+      };
+    }
+
+    function clampPrimaryWidth(primaryWidth, totalWidth, resizerWidth) {
+      var limits = getLayoutLimits(totalWidth, resizerWidth);
+      return Math.max(limits.minPrimary, Math.min(primaryWidth, limits.maxPrimary));
+    }
+
     function applyColumns() {
-      var totalWidth = columns.getBoundingClientRect().width;
-      var minPrimary = totalWidth * 0.3;
-      var minSecondary = 440;
+      var watchFlexy = document.querySelector('ytd-watch-flexy');
+      if (isTheaterMode(watchFlexy)) {
+        resizer.style.display = 'none';
+        columns.style.display = '';
+        columns.style.flexWrap = '';
+        applyWatchModeGutter(watchFlexy);
+        resetColumnWidths();
+        return;
+      }
+
+      resizer.style.display = '';
+      columns.style.display = 'flex';
+      columns.style.flexWrap = 'nowrap';
+      applyWatchModeGutter(watchFlexy);
+      var metrics = getColumnsMetrics();
+      var totalWidth = metrics.contentWidth;
+      if (!totalWidth) return;
+      var resizerWidth = getResizerWidth();
       var primaryWidth = Math.round((totalWidth - resizerWidth) * splitRatio);
-      primaryWidth = Math.max(minPrimary, Math.min(primaryWidth, totalWidth - minSecondary - resizerWidth));
+      primaryWidth = clampPrimaryWidth(primaryWidth, totalWidth, resizerWidth);
       var secondaryWidth = totalWidth - primaryWidth - resizerWidth;
 
       primary.style.width = primaryWidth + 'px';
@@ -403,6 +482,8 @@
       secondary.style.maxWidth = 'none';
       secondary.style.minWidth = '0';
       secondary.style.flex = 'none';
+
+      scheduleVideoFit(primary);
     }
 
     applyColumns();
@@ -413,6 +494,25 @@
       applyColumns();
     };
     window.addEventListener('resize', YTX._resizerOnWindowResize);
+
+    var watchFlexyForObserver = document.querySelector('ytd-watch-flexy');
+    if (watchFlexyForObserver) {
+      YTX._resizerWatchFlexyObserver = new MutationObserver(function () {
+        applyColumns();
+        forceVideoResize(primary);
+      });
+      YTX._resizerWatchFlexyObserver.observe(watchFlexyForObserver, {
+        attributes: true,
+        attributeFilter: ['theater', 'fullscreen'],
+      });
+    }
+
+    if (window.ResizeObserver) {
+      YTX._resizerResizeObserver = new ResizeObserver(function () {
+        if (!isTheaterMode(document.querySelector('ytd-watch-flexy'))) scheduleVideoFit(primary);
+      });
+      YTX._resizerResizeObserver.observe(primary);
+    }
 
     var isDragging = false;
 
@@ -434,12 +534,12 @@
     // 保存引用以便清理
     YTX._resizerOnMove = function (e) {
       if (!isDragging) return;
-      var columnsRect = columns.getBoundingClientRect();
-      var totalWidth = columnsRect.width;
-      var primaryWidth = e.clientX - columnsRect.left;
-      var minPrimary = totalWidth * 0.3;
-      var minSecondary = 440;
-      primaryWidth = Math.max(minPrimary, Math.min(primaryWidth, totalWidth - minSecondary - resizerWidth));
+      var metrics = getColumnsMetrics();
+      var totalWidth = metrics.contentWidth;
+      if (!totalWidth) return;
+      var resizerWidth = getResizerWidth();
+      var primaryWidth = e.clientX - metrics.rect.left - metrics.paddingLeft;
+      primaryWidth = clampPrimaryWidth(primaryWidth, totalWidth, resizerWidth);
       splitRatio = primaryWidth / (totalWidth - resizerWidth);
 
       primary.style.width = primaryWidth + 'px';
@@ -474,19 +574,112 @@
     var watchFlexy = document.querySelector('ytd-watch-flexy');
     if (watchFlexy) watchFlexy.classList.add('ytx-resized');
 
+    if (!primary) return;
+    if (isTheaterMode(watchFlexy)) {
+      resetForcedPlayerSize(primary);
+      window.dispatchEvent(new Event('resize'));
+      return;
+    }
+
     var playerContainer = primary.querySelector('#player-container-inner');
     if (playerContainer) {
       playerContainer.style.maxWidth = '100%';
     }
-    var moviePlayer = primary.querySelector('#movie_player');
+    var moviePlayer = document.querySelector('#movie_player');
     if (moviePlayer) {
-      var outer = primary.querySelector('#player-container-outer');
-      var w = (outer && outer.clientWidth) || primary.clientWidth;
-      var h = Math.round(w * 9 / 16);
-      moviePlayer.style.width = w + 'px';
-      moviePlayer.style.height = h + 'px';
+      moviePlayer.style.width = '';
+      moviePlayer.style.height = '';
     }
     window.dispatchEvent(new Event('resize'));
+    scheduleVideoFit(primary);
+  }
+
+  function isTheaterMode(watchFlexy) {
+    return !!watchFlexy && (watchFlexy.hasAttribute('theater') || watchFlexy.hasAttribute('fullscreen'));
+  }
+
+  function resetForcedPlayerSize(primary) {
+    var playerContainer = primary && primary.querySelector('#player-container-inner');
+    if (playerContainer) playerContainer.style.maxWidth = '';
+
+    var moviePlayer = document.querySelector('#movie_player');
+    if (moviePlayer) {
+      moviePlayer.style.width = '';
+      moviePlayer.style.height = '';
+      var videoContainer = moviePlayer.querySelector('.html5-video-container');
+      if (videoContainer) videoContainer.classList.remove('ytx-video-fit-container');
+      var video = moviePlayer.querySelector('video.html5-main-video');
+      if (video) {
+        video.classList.remove('ytx-video-fit');
+        video.style.width = '';
+        video.style.height = '';
+        video.style.left = '';
+        video.style.top = '';
+        video.style.right = '';
+        video.style.bottom = '';
+        video.style.transform = '';
+        video.style.removeProperty('--ytx-video-fit-width');
+        video.style.removeProperty('--ytx-video-fit-height');
+        video.style.removeProperty('--ytx-video-fit-left');
+        video.style.removeProperty('--ytx-video-fit-top');
+      }
+    }
+  }
+
+  function scheduleVideoFit(primary) {
+    fitMainVideo(primary);
+    requestAnimationFrame(function () {
+      fitMainVideo(primary);
+      requestAnimationFrame(function () { fitMainVideo(primary); });
+    });
+  }
+
+  function fitMainVideo(primary) {
+    var watchFlexy = document.querySelector('ytd-watch-flexy');
+    if (!primary || isTheaterMode(watchFlexy)) return;
+
+    var moviePlayer = document.querySelector('#movie_player');
+    var video = moviePlayer && moviePlayer.querySelector('video.html5-main-video');
+    var videoContainer = moviePlayer && moviePlayer.querySelector('.html5-video-container');
+    if (!moviePlayer || !video) return;
+    if (!video.videoWidth || !video.videoHeight) {
+      if (!video.dataset.ytxFitMetadataBound) {
+        video.dataset.ytxFitMetadataBound = '1';
+        video.addEventListener('loadedmetadata', function () { scheduleVideoFit(primary); }, { once: true });
+      }
+      return;
+    }
+
+    var playerRect = moviePlayer.getBoundingClientRect();
+    var playerWidth = Math.round(playerRect.width);
+    var playerHeight = Math.round(playerRect.height);
+    if (!playerWidth || !playerHeight) return;
+
+    var videoRatio = video.videoWidth / video.videoHeight;
+    var playerRatio = playerWidth / playerHeight;
+    var fitWidth;
+    var fitHeight;
+    var left;
+    var top;
+
+    if (playerRatio > videoRatio) {
+      fitHeight = playerHeight;
+      fitWidth = Math.round(fitHeight * videoRatio);
+      left = Math.round((playerWidth - fitWidth) / 2);
+      top = 0;
+    } else {
+      fitWidth = playerWidth;
+      fitHeight = Math.round(fitWidth / videoRatio);
+      left = 0;
+      top = Math.round((playerHeight - fitHeight) / 2);
+    }
+
+    if (videoContainer) videoContainer.classList.add('ytx-video-fit-container');
+    video.classList.add('ytx-video-fit');
+    video.style.setProperty('--ytx-video-fit-width', fitWidth + 'px');
+    video.style.setProperty('--ytx-video-fit-height', fitHeight + 'px');
+    video.style.setProperty('--ytx-video-fit-left', left + 'px');
+    video.style.setProperty('--ytx-video-fit-top', top + 'px');
   }
 
   function removeResizer() {
@@ -494,6 +687,8 @@
     if (YTX._resizerOnMove) { document.removeEventListener('mousemove', YTX._resizerOnMove); YTX._resizerOnMove = null; }
     if (YTX._resizerOnUp) { document.removeEventListener('mouseup', YTX._resizerOnUp); YTX._resizerOnUp = null; }
     if (YTX._resizerOnWindowResize) { window.removeEventListener('resize', YTX._resizerOnWindowResize); YTX._resizerOnWindowResize = null; }
+    if (YTX._resizerWatchFlexyObserver) { YTX._resizerWatchFlexyObserver.disconnect(); YTX._resizerWatchFlexyObserver = null; }
+    if (YTX._resizerResizeObserver) { YTX._resizerResizeObserver.disconnect(); YTX._resizerResizeObserver = null; }
 
     var resizer = document.getElementById('ytx-resizer');
     if (resizer) resizer.remove();
@@ -506,13 +701,21 @@
     var columns = document.querySelector('ytd-watch-flexy #columns');
     var primary = columns && columns.querySelector('#primary');
     var secondary = columns && columns.querySelector('#secondary');
+    if (columns) {
+      columns.style.display = '';
+      columns.style.flexWrap = '';
+      columns.style.boxSizing = '';
+      columns.style.width = '';
+      columns.style.marginLeft = '';
+      columns.style.marginRight = '';
+      columns.style.paddingLeft = '';
+      columns.style.paddingRight = '';
+      columns.classList.remove('ytx-columns-layout');
+    }
     if (primary) { primary.style.width = ''; primary.style.maxWidth = ''; primary.style.minWidth = ''; primary.style.flex = ''; }
     if (secondary) { secondary.style.width = ''; secondary.style.maxWidth = ''; secondary.style.minWidth = ''; secondary.style.flex = ''; }
 
-    var playerContainer = primary && primary.querySelector('#player-container-inner');
-    if (playerContainer) playerContainer.style.maxWidth = '';
-    var moviePlayer = primary && primary.querySelector('#movie_player');
-    if (moviePlayer) { moviePlayer.style.width = ''; moviePlayer.style.height = ''; }
+    resetForcedPlayerSize(primary);
     window.dispatchEvent(new Event('resize'));
   }
 
